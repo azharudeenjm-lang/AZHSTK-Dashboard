@@ -10,6 +10,10 @@ on:
         description: "Refresh fundamentals too (slow, ~1 hour first time)"
         type: boolean
         default: false
+      backtest:
+        description: "Rerun the weekly zone backtest (adds ~15-25 min)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -41,11 +45,11 @@ jobs:
 
       - name: Run pipeline
         run: |
-          if [ "${{ github.event.schedule }}" = "30 3 * * 6" ] || [ "${{ inputs.fundamentals }}" = "true" ]; then
-            python run.py --fundamentals
-          else
-            python run.py
-          fi
+          ARGS=""
+          if [ "${{ github.event.schedule }}" = "30 3 * * 6" ]; then ARGS="--fundamentals --backtest"; fi
+          if [ "${{ inputs.fundamentals }}" = "true" ]; then ARGS="$ARGS --fundamentals"; fi
+          if [ "${{ inputs.backtest }}" = "true" ]; then ARGS="$ARGS --backtest"; fi
+          python run.py $ARGS
 
       # Publish to a separate "gh-pages" branch as one fresh commit each time,
       # so the repository doesn't grow by megabytes every day and your own
