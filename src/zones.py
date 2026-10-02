@@ -161,14 +161,14 @@ def build_zones(close, high, low, tickers, tf="d"):
             "days": bars, "capped": start == 0,
             "prev": NAME.get(prev) if prev else None,
             "new": start > 0 and bars <= p["new_bars"] and z not in ("N", "-"),
-            "strip": "".join(sm[-30:]),
+            "strip": "".join(sm),
             "rsi": _r(last["rsi"].get(t), 1), "hist": _r(last["hist"].get(t), 2),
             "macd_x": None if pd.isna(m) or pd.isna(s) else ("Above signal" if m > s else "Below signal"),
             "adx": _r(last["adx"].get(t), 1), "pdi": _r(last["pdi"].get(t), 1),
             "mdi": _r(last["mdi"].get(t), 1), "chop": _r(last["chop"].get(t), 1),
             "cloud": cloud, "stretch": _r(ls.get(t), 1),
         }
-    return res, [d.strftime("%Y-%m-%d") for d in dates[-30:]], dates[0].strftime("%Y-%m-%d")
+    return res, [d.strftime("%Y-%m-%d") for d in dates], dates[0].strftime("%Y-%m-%d")
 
 
 def _r(x, n):
