@@ -62,6 +62,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,tr:focus-visible{o
 .rrg{width:100%;height:auto;display:block;touch-action:manipulation}
 .rrg text{font-family:var(--font)}
 .legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.8rem;color:var(--muted);margin-top:8px}
+.qf{display:flex;flex-wrap:wrap;gap:4px}
+.qf button{font:500 .78rem var(--font);color:var(--ink);background:transparent;border:1px solid var(--line);border-radius:999px;padding:3px 9px;cursor:pointer}
+.qf button[aria-pressed="false"]{opacity:.45;text-decoration:line-through}
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:middle}
 .tbl{overflow-x:auto;-webkit-overflow-scrolling:touch}
 table{border-collapse:collapse;width:100%;font-size:.86rem}
@@ -90,6 +93,7 @@ label.tog{font-size:.85rem;color:var(--muted);display:flex;gap:6px;align-items:c
 .empty{color:var(--muted);font-size:.88rem;padding:8px 0}
 .kpis{display:flex;flex-wrap:wrap;gap:6px 20px;font-size:.86rem;color:var(--muted);margin-bottom:12px}
 .kpis b{color:var(--ink);font-weight:600}
+.lk{white-space:nowrap}
 .tv{font-size:.72rem;font-weight:600;color:var(--focus,var(--impr));text-decoration:none;border:1px solid currentColor;border-radius:6px;padding:0 5px;margin-left:6px;vertical-align:1px}
 .tv:hover{background:color-mix(in srgb,currentColor 12%,transparent)}
 .note{color:var(--muted);font-size:.78rem;margin-top:24px;max-width:72ch}
@@ -112,9 +116,13 @@ label.tog{font-size:.85rem;color:var(--muted);display:flex;gap:6px;align-items:c
         <button data-tf="w" aria-pressed="false">Weekly</button>
       </div>
     </div>
-    <p class="sub">Tap a sector to open it. Tails show the path over the last few periods; rotation usually runs clockwise.</p>
+    <p class="sub">Tap a sector to open it and highlight its path. Rotation usually runs clockwise: improving, leading, weakening, lagging.</p>
+    <div class="tools" style="margin-bottom:8px">
+      <label class="tog">Tail <select id="tail" aria-label="Tail length">
+        <option value="1">Off</option><option value="3" selected>3 points</option><option value="4">4 points</option><option value="6">6 points</option><option value="10">10 points</option></select></label>
+      <div class="qf" id="legend" role="group" aria-label="Show quadrants"></div>
+    </div>
     <svg id="rrg-sec" class="rrg" role="img" aria-label="Relative rotation graph of sectors"></svg>
-    <div class="legend" id="legend"></div>
   </section>
 
   <section class="panel" aria-labelledby="h-sec">
@@ -178,55 +186,91 @@ const fmt = (v,d=1) => v==null ? "–" : Number(v).toLocaleString("en-IN",{minim
 const sign = (v,d=1) => v==null ? "<td>–</td>" : `<td class="${v>0?'up':v<0?'down':''}">${v>0?'+':''}${fmt(v,d)}</td>`;
 const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const tv = (sym, iv) => "https://www.tradingview.com/chart/?symbol=" + encodeURIComponent("NSE:" + sym.replace(/[&-]/g,"_")) + (iv ? "&interval=" + iv : "");
-const tvLink = (sym, iv) => `<a class="tv" href="${tv(sym, iv)}" target="_blank" rel="noopener" aria-label="Open ${esc(sym)} chart on TradingView" onclick="event.stopPropagation()">Chart</a>`;
+const scr = sym => "https://www.screener.in/company/" + encodeURIComponent(sym) + "/";
+const tvLink = (sym, iv) => `<span class="lk"><a class="tv" href="${tv(sym, iv)}" target="_blank" rel="noopener" aria-label="Open ${esc(sym)} chart on TradingView" onclick="event.stopPropagation()">Chart</a><a class="tv" href="${scr(sym)}" target="_blank" rel="noopener" aria-label="Open ${esc(sym)} on Screener" onclick="event.stopPropagation()">Screener</a></span>`;
 const chip = q => q ? `<span class="chip q-${q}">${q}</span>` : "–";
 
-let tf = "d", view = "tech", cur = null, showAll = false;
+let picked = false, tf = "d", view = "tech", cur = null, showAll = false, tailLen = 3; const hiddenQ = new Set();
 let secSort = {k:"r1d",dir:-1}, stkSort = {k:"r1d",dir:-1};
 const bySec = {}; D.stocks.forEach(s => (bySec[s.sector] ??= []).push(s));
 
 document.getElementById("gen").textContent = "Updated " + D.generated;
 const b = D.bench || {};
 document.getElementById("bench").innerHTML = b.price ? `NIFTY 50 ${fmt(b.price,0)} <span class="${b.r1d>=0?'up':'down'}">${b.r1d>0?'+':''}${fmt(b.r1d,2)}%</span> ·` : "";
-document.getElementById("legend").innerHTML = Object.keys(QC).map(q=>`<span><i class="dot" style="background:${qcol(q)}"></i>${q}</span>`).join("");
+function drawLegend(){
+  const el = document.getElementById("legend");
+  el.innerHTML = Object.keys(QC).map(q=>`<button data-q="${q}" aria-pressed="${!hiddenQ.has(q)}"><i class="dot" style="background:${qcol(q)}"></i>${q}</button>`).join("");
+  el.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{
+    const q=b.dataset.q; hiddenQ.has(q)?hiddenQ.delete(q):hiddenQ.add(q);
+    if (hiddenQ.size===4) hiddenQ.clear();
+    drawLegend(); renderSectorRRG(); renderStocks(); }));
+}
+drawLegend();
+document.getElementById("tail").addEventListener("change",e=>{ tailLen=+e.target.value; renderSectorRRG(); renderStocks(); });
 
 /* ---------- RRG drawing ---------- */
 function drawRRG(svg, items, opts={}){
   const W = Math.round(Math.max(340, Math.min(640, svg.clientWidth || 640))), H = Math.round(W*0.86), P = {l:30,r:12,t:14,b:30};
   svg.setAttribute("viewBox",`0 0 ${W} ${H}`);
-  const pts = items.flatMap(i => i.tail.x.map((x,k)=>[x,i.tail.y[k]])).filter(p=>p[0]!=null&&p[1]!=null);
-  if (!pts.length){ svg.innerHTML = `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="${css('--muted')}" font-size="15">Not enough liquid history to plot.</text>`; return; }
-  let dx = Math.max(1.2, ...pts.map(p=>Math.abs(p[0]-100)))*1.12, dy = Math.max(1.2, ...pts.map(p=>Math.abs(p[1]-100)))*1.12;
-  const X = v => P.l + (v-(100-dx))/(2*dx)*(W-P.l-P.r), Y = v => H-P.b - (v-(100-dy))/(2*dy)*(H-P.t-P.b);
+  const tl = opts.tailLen ?? 5, sel = opts.sel;
+  items = items.filter(i => !hiddenQ.has(i.q) || i.key===sel).map(i=>{
+    const keep = i.key===sel ? Math.max(tl, 3) : Math.max(1, tl);
+    const t = {x:i.tail.x.slice(-keep), y:i.tail.y.slice(-keep), d:(i.tail.d||[]).slice(-keep)};
+    return {...i, tail:t};
+  }).filter(i=>i.tail.x.length && i.tail.x.at(-1)!=null);
+  if (!items.length){ svg.innerHTML = `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="${css('--muted')}" font-size="15">Nothing to plot with these filters.</text>`; return; }
+  // robust scale: fit the heads fully, let long tails run off the edge
+  const dev = (arr) => arr.map(v=>Math.abs(v-100)).filter(v=>!isNaN(v)).sort((a,b)=>a-b);
+  const q = (arr,p) => arr.length ? arr[Math.min(arr.length-1, Math.floor(p*(arr.length-1)))] : 0;
+  const hx = dev(items.map(i=>i.tail.x.at(-1))), hy = dev(items.map(i=>i.tail.y.at(-1)));
+  const ax = dev(items.flatMap(i=>i.tail.x)), ay = dev(items.flatMap(i=>i.tail.y));
+  const dx = Math.max(1.0, q(hx,1)*1.15, q(ax,.9)*1.1), dy = Math.max(1.0, q(hy,1)*1.15, q(ay,.9)*1.1);
+  const clamp = (v,a,b)=>Math.min(b,Math.max(a,v));
+  const X = v => clamp(P.l + (v-(100-dx))/(2*dx)*(W-P.l-P.r), P.l+2, W-P.r-2);
+  const Y = v => clamp(H-P.b - (v-(100-dy))/(2*dy)*(H-P.t-P.b), P.t+2, H-P.b-2);
   const cx = X(100), cy = Y(100), mut = css("--muted"), line = css("--line");
   let g = "";
   const quad = [[cx,P.t,W-P.r-cx,cy-P.t,"Leading","end",W-P.r-8,P.t+18],[cx,cy,W-P.r-cx,H-P.b-cy,"Weakening","end",W-P.r-8,H-P.b-8],
                 [P.l,cy,cx-P.l,H-P.b-cy,"Lagging","start",P.l+8,H-P.b-8],[P.l,P.t,cx-P.l,cy-P.t,"Improving","start",P.l+8,P.t+18]];
-  quad.forEach(([x,y,w,h,q,a,tx,ty])=>{ g += `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${qcol(q)}" opacity=".07"/>
-    <text x="${tx}" y="${ty}" text-anchor="${a}" font-size="13" font-weight="600" fill="${qcol(q)}">${q}</text>`; });
+  quad.forEach(([x,y,w,h,qq,a,tx,ty])=>{ g += `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${qcol(qq)}" opacity=".07"/>
+    <text x="${tx}" y="${ty}" text-anchor="${a}" font-size="13" font-weight="600" fill="${qcol(qq)}" opacity=".8">${qq}</text>`; });
   g += `<line x1="${cx}" x2="${cx}" y1="${P.t}" y2="${H-P.b}" stroke="${line}"/><line x1="${P.l}" x2="${W-P.r}" y1="${cy}" y2="${cy}" stroke="${line}"/>`;
   g += `<text x="${(W+P.l)/2}" y="${H-8}" text-anchor="middle" font-size="12" fill="${mut}">RS-Ratio (trend of relative strength)</text>
         <text transform="translate(12 ${(H-P.b+P.t)/2}) rotate(-90)" text-anchor="middle" font-size="12" fill="${mut}">RS-Momentum</text>`;
-  const labels = [];
+  // smooth curve through tail points (Catmull-Rom to Bezier)
+  const curve = pts => { if (pts.length<2) return "";
+    let d = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+    for (let i=0;i<pts.length-1;i++){ const p0=pts[i-1]||pts[i], p1=pts[i], p2=pts[i+1], p3=pts[i+2]||p2;
+      d += ` C${(p1[0]+(p2[0]-p0[0])/6).toFixed(1)},${(p1[1]+(p2[1]-p0[1])/6).toFixed(1)} ${(p2[0]-(p3[0]-p1[0])/6).toFixed(1)},${(p2[1]-(p3[1]-p1[1])/6).toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`; }
+    return d; };
+  const labels = [], many = items.length > (opts.labelMax ?? 40);
+  // draw the selected item last so it sits on top
+  items.sort((a,b)=>(a.key===sel)-(b.key===sel));
   items.forEach(it=>{
-    const t = it.tail, n = t.x.length, col = qcol(it.q), on = opts.sel===it.key;
-    const path = t.x.map((x,k)=>`${X(x).toFixed(1)},${Y(t.y[k]).toFixed(1)}`).join(" ");
-    const op = opts.sel && !on ? (opts.tails===false ? .35 : .5) : 1;
+    const t = it.tail, n = t.x.length, col = qcol(it.q), on = sel===it.key;
+    const pts = t.x.map((x,k)=>[X(x),Y(t.y[k])]);
+    const op = sel && !on ? .3 : 1;
     let s = `<g data-key="${esc(it.key)}" style="cursor:pointer" opacity="${op}" tabindex="0" role="button" aria-label="${esc(it.label)}, ${it.q}">`;
-    if (opts.tails!==false || on) s += `<polyline points="${path}" fill="none" stroke="${col}" stroke-width="${on?2.4:1.6}" stroke-linejoin="round" opacity=".75"/>`;
-    if (opts.tails!==false || on) t.x.slice(0,-1).forEach((x,k)=>{ s+=`<circle cx="${X(x)}" cy="${Y(t.y[k])}" r="2.4" fill="${col}" opacity="${.25+.5*k/n}"/>`; });
-    const hx = X(t.x[n-1]), hy = Y(t.y[n-1]);
-    s += `<circle cx="${hx}" cy="${hy}" r="${on?7:5.5}" fill="${col}" stroke="${css('--panel')}" stroke-width="1.5"/>`;
+    if (n>1){
+      s += `<path d="${curve(pts)}" fill="none" stroke="${col}" stroke-width="${on?2.6:1.3}" stroke-linecap="round" opacity="${on?.95:.45}"/>`;
+      pts.slice(0,-1).forEach(([x,y],k)=>{ s+=`<circle cx="${x}" cy="${y}" r="${on?3:2}" fill="${col}" opacity="${.2+.6*k/n}"><title>${esc(it.label)} ${esc(t.d[k]||"")}</title></circle>`; });
+    }
+    const [hx2,hy2] = pts[n-1];
+    s += `<circle cx="${hx2}" cy="${hy2}" r="${on?7.5:5.5}" fill="${col}" stroke="${css('--panel')}" stroke-width="1.5"/>`;
     s += `<title>${esc(it.label)}: ${it.q} (RS-Ratio ${fmt(t.x[n-1],2)}, Momentum ${fmt(t.y[n-1],2)})</title></g>`;
-    g += s; labels.push({x:hx,y:hy,text:it.label,on,op});
+    g += s; if (!many || on) labels.push({x:hx2,y:hy2,text:it.label,on,op});
   });
-  // simple label nudging to reduce overlap
-  labels.sort((a,b)=>a.y-b.y);
-  const placed=[];
-  labels.forEach(l=>{ let ly=l.y-9; const w=l.text.length*6.6;
-    for(let i=0;i<6 && placed.some(p=>Math.abs(p.x-l.x)<(w+p.w)/2 && Math.abs(p.y-ly)<13);i++) ly-=13;
-    placed.push({x:l.x,y:ly,w}); const anchor = l.x > W-100 ? "end" : l.x < P.l+60 ? "start" : "middle";
-    g += `<text x="${l.x}" y="${ly}" text-anchor="${anchor}" font-size="${l.on?13:12}" font-weight="${l.on?700:500}" fill="${css('--ink')}" opacity="${l.op}" pointer-events="none" paint-order="stroke" stroke="${css('--panel')}" stroke-width="3">${esc(l.text)}</text>`; });
+  // label placement: try above, below, right, left; skip if no room (tooltip still works)
+  const placed=[], lw = t => t.length*6.4+4;
+  labels.sort((a,b)=>b.on-a.on);
+  labels.forEach(l=>{ const w=lw(l.text);
+    const tries=[[0,-10,"middle"],[0,17,"middle"],[w/2+8,4,"middle"],[-w/2-8,4,"middle"],[0,-23,"middle"],[0,30,"middle"]];
+    for (const [ox,oy] of tries){ const x=clamp(l.x+ox, P.l+w/2, W-P.r-w/2), y=l.y+oy;
+      if (y<P.t+10 || y>H-P.b-2) continue;
+      if (placed.some(p=>Math.abs(p.x-x)<(w+p.w)/2 && Math.abs(p.y-y)<12)) continue;
+      placed.push({x,y,w});
+      g += `<text x="${x}" y="${y}" text-anchor="middle" font-size="${l.on?13:11.5}" font-weight="${l.on?700:500}" fill="${css('--ink')}" opacity="${l.op}" pointer-events="none" paint-order="stroke" stroke="${css('--panel')}" stroke-width="3">${esc(l.text)}</text>`;
+      break; } });
   svg.innerHTML = g;
   svg.querySelectorAll("g[data-key]").forEach(el=>{
     const go = ()=>opts.onPick && opts.onPick(el.dataset.key);
@@ -237,7 +281,7 @@ function drawRRG(svg, items, opts={}){
 /* ---------- sector side ---------- */
 function renderSectorRRG(){
   const items = D.sectors.filter(s=>s["rrg_"+tf]).map(s=>({key:s.sector,label:short(s.sector),tail:s["rrg_"+tf],q:s["q_"+tf]}));
-  drawRRG(document.getElementById("rrg-sec"), items, {sel:cur, onPick:openSector});
+  drawRRG(document.getElementById("rrg-sec"), items, {sel:picked?cur:null, tailLen, onPick:openSector});
 }
 const SCOLS = [["sector","Sector"],["q","Quadrant"],["r1d","1D %"],["r1w","1W %"],["r1m","1M %"],["r3m","3M %"],["above50","Breadth"],["ad","Adv / Dec"],["count","Stocks"]];
 function renderSectorTable(){
@@ -252,7 +296,8 @@ function renderSectorTable(){
 /* ---------- detail ---------- */
 const TECH = [["sym","Stock"],["price","Price"],["r1d","1D %"],["r1w","1W %"],["r1m","1M %"],["r3m","3M %"],["rsi","RSI"],["vs50","vs 50DMA"],["vs200","vs 200DMA"],["from_high","From 52w high"],["vol_x","Volume ×"],["q","RRG"]];
 const FUND = [["sym","Stock"],["price","Price"],["mcap_cr","Mcap ₹cr"],["pe","P/E"],["pb","P/B"],["roe","ROE %"],["de","Debt/Eq"],["margin","Net margin %"],["rev_g","Revenue growth %"],["eps_g","Earnings growth %"],["r1y","1Y %"]];
-function openSector(sec, focusSym){
+function openSector(sec, focusSym, auto){
+  if (!auto) picked = true;
   cur = sec; showAll = false;
   const s = D.sectors.find(x=>x.sector===sec) || {};
   document.getElementById("h-det").textContent = sec;
@@ -265,7 +310,7 @@ function openSector(sec, focusSym){
 }
 function renderStockRRG(list, sel){
   const items = list.filter(s=>s["rrg_"+tf]).map(s=>({key:s.sym,label:s.sym,tail:s["rrg_"+tf],q:s["q_"+tf]}));
-  drawRRG(document.getElementById("rrg-stk"), items, {tails:items.length<=12, sel, onPick:k=>renderStocks(k)});
+  drawRRG(document.getElementById("rrg-stk"), items, {tailLen: items.length<=15 ? tailLen : 1, labelMax:25, sel, onPick:k=>renderStocks(k)});
 }
 let selStock = null;
 function renderStocks(focusSym){
@@ -307,7 +352,7 @@ function bindTable(t, st, redraw, onRow){
     tr.addEventListener("keydown",e=>{ if(e.key==="Enter"){ onRow(tr);} }); });
 }
 document.querySelectorAll("[data-tf]").forEach(bn=>bn.addEventListener("click",()=>{
-  tf = bn.dataset.tf; document.querySelectorAll("[data-tf]").forEach(x=>x.setAttribute("aria-pressed",x===bn)); openSector(cur, selStock); }));
+  tf = bn.dataset.tf; document.querySelectorAll("[data-tf]").forEach(x=>x.setAttribute("aria-pressed",x===bn)); openSector(cur, selStock, !picked); }));
 document.querySelectorAll("[data-view]").forEach(bn=>bn.addEventListener("click",()=>{
   view = bn.dataset.view; document.querySelectorAll("[data-view]").forEach(x=>x.setAttribute("aria-pressed",x===bn));
   stkSort = view==="fund" ? {k:"mcap_cr",dir:-1} : {k:"r1d",dir:-1}; renderStocks(); }));
@@ -327,8 +372,8 @@ document.getElementById("movers").innerHTML = mv.length ? mv.map(m=>`<li><b>${es
   m.news.length ? m.news.slice(0,2).map(n=>`<br><a href="${esc(n.u)}" target="_blank" rel="noopener">${esc(n.t)}</a><span>${esc(n.s)} ${esc(n.d)}</span>`).join("") : `<span>No headlines found.</span>`}</li>`).join("") : `<li class="empty">No mover headlines in this run.</li>`;
 
 const first = [...D.sectors].filter(s=>s.q_d).sort((a,b)=>(b.r1d??-99)-(a.r1d??-99))[0] || D.sectors[0];
-openSector(first.sector, null);
-let rz; addEventListener("resize",()=>{clearTimeout(rz); rz=setTimeout(()=>openSector(cur, selStock),200);});
+openSector(first.sector, null, true);
+let rz; addEventListener("resize",()=>{clearTimeout(rz); rz=setTimeout(()=>openSector(cur, selStock, !picked),200);});
 </script>
 </body>
 </html>
