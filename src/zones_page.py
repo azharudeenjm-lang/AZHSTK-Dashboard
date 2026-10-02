@@ -79,6 +79,11 @@ h2{font-size:1.1rem;margin:0 0 4px;font-weight:600}
 .ent button{font:inherit;font-size:.8rem;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;padding:4px 8px;cursor:pointer;display:flex;gap:6px;align-items:center}
 .ent button i{width:8px;height:8px;border-radius:50%;background:var(--c);display:inline-block}
 .ent button small{color:var(--muted)}
+.zg{margin:0 0 10px;padding-left:10px;border-left:3px solid var(--line)}
+.zg-h{margin:0 0 6px;font-size:.85rem}
+.fg{display:grid;grid-template-columns:minmax(120px,max-content) 1fr;gap:6px 10px;align-items:start;margin:0 0 6px}
+@media(max-width:600px){.fg{grid-template-columns:1fr}}
+.fg-h{font-size:.8rem;color:var(--ink);padding-top:5px}
 .empty{color:var(--muted);font-size:.88rem;padding:6px 0}
 
 .tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
@@ -123,7 +128,7 @@ dt{font-weight:600} dd{margin:0;color:var(--muted);max-width:70ch}
 <div class="wrap">
 <header>
   <h1>NSE technical zones</h1>
-  <nav aria-label="Dashboards"><a href="index.html">Sector rotation</a><a href="zones.html" aria-current="page">Zones</a></nav>
+  <nav aria-label="Dashboards"><a href="index.html">Sector rotation</a><a href="zones.html" aria-current="page">Zones</a><a href="levels.html">Levels</a></nav>
 </header>
 <div style="display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;margin:0 0 14px">
   <p class="stamp" id="gen" style="margin:0"></p>
@@ -148,6 +153,7 @@ dt{font-weight:600} dd{margin:0;color:var(--muted);max-width:70ch}
   <p class="sub" id="all-sub"></p>
   <div class="tools">
     <select id="f-zone" aria-label="Zone"></select>
+    <select id="f-prev" aria-label="Came from"></select>
     <select id="f-sec" aria-label="Sector"></select>
     <select id="f-new" aria-label="Entered"></select>
     <input type="search" id="q" placeholder="Find a stock" aria-label="Find a stock">
@@ -223,8 +229,9 @@ function drawRules(){
 }
 function base(){
   const liq = document.getElementById("liq").checked;
-  const sec = document.getElementById("f-sec").value;
-  return S.filter(s => (!liq || s.liquid) && (!sec || s.sector===sec));
+  const sec = document.getElementById("f-sec").value, pv = document.getElementById("f-prev").value;
+  return S.filter(s => (!liq || s.liquid) && (!sec || s.sector===sec)
+    && (!pv || (pv==="__old" ? s.capped : (!s.capped && s.prev===pv))));
 }
 
 function drawCycle(){
@@ -250,13 +257,22 @@ function drawNew(){
   const box = document.getElementById("days");
   if (!keys.length){ box.innerHTML = `<p class="empty">No new entries${zoneF?` into ${zoneF}`:""} in the last ${unitsN(nd)} with these filters.</p>`; return; }
   box.innerHTML = keys.map(d=>{
-    const items = by[d].sort((a,b)=>ORDER.indexOf(a.zone)-ORDER.indexOf(b.zone) || a.sym.localeCompare(b.sym));
+    const items = by[d];
     const ago = sessIdx[d]; const tag = ago===0 ? (tf==="d"?"today":"latest week") : `${unitsN(ago)} ago`;
     const head = tf==="d" ? dlabel(d) : `Week ending ${dlabel(d)}`;
-    const CAP = 24, full = openDays.has(d) || items.length <= CAP;
-    return `<div class="day"><h3>${head} <span>${tag}, ${items.length} ${items.length===1?"stock":"stocks"}</span></h3><div class="ent">${
-      (full ? items : items.slice(0,CAP)).map(s=>`<button data-sym="${esc(s.sym)}" style="--c:${zc(s.zone)}" title="${esc(s.name)}"><i></i><b>${esc(s.sym)}</b> ${esc(s.zone)}${s.prev?` <small>from ${esc(s.prev)}</small>`:""}</button>`).join("")}${
-      full ? "" : `<button class="more" data-day="${d}" style="margin:0">Show all ${items.length}</button>`}</div></div>`;
+    let inner = "";
+    ORDER.forEach(z=>{
+      const zi = items.filter(s=>s.zone===z); if (!zi.length) return;
+      const g = new Map(); zi.forEach(s=>{ const k=s.prev||"no data"; if(!g.has(k)) g.set(k,[]); g.get(k).push(s); });
+      inner += `<div class="zg"><div class="zg-h">${chip(z)} <b>${zi.length}</b></div>` +
+        [...g.entries()].sort((a,b)=>b[1].length-a[1].length).map(([pv,list])=>{
+          const key = d+"|"+z+"|"+pv, CAP = 18, full = openDays.has(key) || list.length <= CAP;
+          list.sort((a,b)=>a.sym.localeCompare(b.sym));
+          return `<div class="fg"><span class="fg-h">from ${esc(pv)} <span class="mut">${list.length}</span></span><div class="ent">${
+            (full?list:list.slice(0,CAP)).map(s=>`<button data-sym="${esc(s.sym)}" style="--c:${zc(z)}" title="${esc(s.name)}"><i style="--c:${zc(pv)}"></i><b>${esc(s.sym)}</b></button>`).join("")}${
+            full ? "" : `<button class="more" data-day="${esc(key)}" style="margin:0">Show all ${list.length}</button>`}</div></div>`; }).join("") + `</div>`;
+    });
+    return `<div class="day"><h3>${head} <span>${tag}, ${items.length} ${items.length===1?"stock":"stocks"}</span></h3>${inner}</div>`;
   }).join("");
   box.querySelectorAll("button[data-day]").forEach(b=>b.addEventListener("click",()=>{ openDays.add(b.dataset.day); drawNew(); }));
   box.querySelectorAll("button[data-sym]").forEach(b=>b.addEventListener("click",()=>{
@@ -340,6 +356,9 @@ fz.addEventListener("change",()=>{ zoneF = fz.value||null; showAll=false; drawAl
 const fs = document.getElementById("f-sec");
 fs.innerHTML = `<option value="">All sectors</option>` + [...new Set(D.stocks.map(s=>s.sector))].sort().map(s=>`<option>${esc(s)}</option>`).join("");
 fs.addEventListener("change",()=>{ showAll=false; drawAll(); });
+const fp = document.getElementById("f-prev");
+fp.innerHTML = `<option value="">Came from any zone</option>` + [...ORDER,"Neutral"].map(z=>`<option value="${z}">Came from ${z}</option>`).join("") + `<option value="__old">In zone before the history window</option>`;
+fp.addEventListener("change",()=>{ showAll=false; openDays.clear(); drawAll(); });
 document.getElementById("f-new").addEventListener("change",()=>{ showAll=false; drawTable(); });
 document.getElementById("liq").addEventListener("change",()=>{ showAll=false; drawAll(); });
 document.getElementById("grp").addEventListener("change",()=>{ showAll=false; drawTable(); });
