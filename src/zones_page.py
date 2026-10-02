@@ -103,6 +103,8 @@ dl{display:grid;grid-template-columns:max-content 1fr;gap:6px 14px;margin:12px 0
 dt{font-weight:600} dd{margin:0;color:var(--muted);max-width:70ch}
 .legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:.76rem;color:var(--muted);margin-top:8px}
 .legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px;background:var(--c)}
+.tv{font-size:.72rem;font-weight:600;color:var(--focus,var(--impr));text-decoration:none;border:1px solid currentColor;border-radius:6px;padding:0 5px;margin-left:6px;vertical-align:1px}
+.tv:hover{background:color-mix(in srgb,currentColor 12%,transparent)}
 .note{color:var(--muted);font-size:.78rem;margin-top:24px;max-width:72ch}
 </style>
 </head>
@@ -163,13 +165,15 @@ const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">
 const fmt = (v,d=1) => v==null ? "–" : Number(v).toLocaleString("en-IN",{minimumFractionDigits:d,maximumFractionDigits:d});
 const sgn = (v,d=1) => v==null ? `<td class="mut">–</td>` : `<td class="${v>0?'up':v<0?'down':''}">${v>0?'+':''}${fmt(v,d)}</td>`;
 const dlabel = s => s ? new Date(s+"T00:00:00").toLocaleDateString("en-IN",{day:"2-digit",month:"short"}) : "";
+const tv = (sym, iv) => "https://www.tradingview.com/chart/?symbol=" + encodeURIComponent("NSE:" + sym.replace(/[&-]/g,"_")) + (iv ? "&interval=" + iv : "");
+const tvLink = (sym, iv) => `<a class="tv" href="${tv(sym, iv)}" target="_blank" rel="noopener" aria-label="Open ${esc(sym)} chart on TradingView" onclick="event.stopPropagation()">Chart</a>`;
 const chip = z => `<span class="chip" style="--c:${zc(z)}">${esc(z)}</span>`;
 
 let zoneF = null, sort = {k:"days",dir:1}, showAll = false, hl = null; const openDays = new Set();
 let tf = "d", S = [], dates = [], sessIdx = {}, P = D.params.d;
 function setTF(t){
   tf = t; P = D.params[t]; dates = D.tf[t].dates;
-  S = D.stocks.filter(s=>s[t]).map(s=>({sym:s.sym,name:s.name,sector:s.sector,liquid:s.liquid,r1d:s.r1d,r1w:s.r1w,r1m:s.r1m,...s[t]}));
+  S = D.stocks.filter(s=>s[t]).map(s=>({sym:s.sym,name:s.name,sector:s.sector,liquid:s.liquid,price:s.price,r1d:s.r1d,r1w:s.r1w,r1m:s.r1m,...s[t]}));
   sessIdx = {}; dates.forEach((d,i)=>sessIdx[d]=dates.length-1-i);
   document.querySelectorAll("[data-tf]").forEach(b=>b.setAttribute("aria-pressed", b.dataset.tf===t));
   const last = dates[dates.length-1];
@@ -242,7 +246,7 @@ function strip(code){
     [...code].map((c,i)=>`<rect x="${i*(w+gap)}" y="1" width="${w}" height="12" rx="1" fill="${zc(CODE[c])}"><title>${dlabel(dates[dates.length-n+i])}: ${CODE[c]}</title></rect>`).join("")}</svg>`;
 }
 
-const cols = () => [["sym","Stock"],["zone","Zone","l"],["since",tf==="d"?"Since":"Since week of","l"],["days",P.units[0].toUpperCase()+P.units.slice(1)],["prev","Came from","l"],["strip",`Last 30 ${P.units}`,"l"],
+const cols = () => [["sym","Stock"],["price","Price"],["zone","Zone","l"],["since",tf==="d"?"Since":"Since week of","l"],["days",P.units[0].toUpperCase()+P.units.slice(1)],["prev","Came from","l"],["strip",`Last 30 ${P.units}`,"l"],
   ["rsi","RSI"],["macd_x","MACD","l"],["adx","ADX"],["di","+DI / −DI"],["chop","Chop"],["cloud","Cloud","l"],["stretch",tf==="d"?`vs ${P.ma}-DMA %`:`vs ${P.ma}-WMA %`],
   tf==="d"?["r1d","1D %"]:["r1w","1W %"],["r1m","1M %"]];
 function drawTable(){
@@ -260,7 +264,8 @@ function drawTable(){
   const t = document.getElementById("t"), COLS = cols();
   const cell = (s,k) => {
     switch(k){
-      case "sym": return `<td class="name"><b>${esc(s.sym)}</b><small>${esc(s.sector)}</small></td>`;
+      case "sym": return `<td class="name"><b>${esc(s.sym)}</b>${tvLink(s.sym, tf==="w"?"W":"D")}<small>${esc(s.sector)}</small></td>`;
+      case "price": return `<td>${fmt(s.price,2)}</td>`;
       case "zone": return `<td class="l">${chip(s.zone)}${s.new?' <small class="mut">new</small>':''}</td>`;
       case "since": return `<td class="l">${s.capped ? `<span class="mut">before ${dlabel(D.tf[tf].lb_start)}</span>` : dlabel(s.since)}</td>`;
       case "days": return `<td>${s.capped ? P.lookback+"+" : s.days}</td>`;
