@@ -7,6 +7,7 @@ import pandas as pd
 from .config import CACHE, FUNDAMENTALS_MAX_AGE_DAYS, FUNDAMENTALS_SLEEP_SEC
 
 PATH = CACHE / "fundamentals.parquet"
+MAX_CONSECUTIVE_FAILS = 25  # give up early when Yahoo blocks the server
 COLS = ["symbol", "fetched", "pe", "pb", "roe", "de", "mcap_cr",
         "margin", "rev_g", "eps_g", "y_sector", "y_industry"]
 
@@ -24,9 +25,18 @@ def _num(x, scale=1.0):
         return None
 
 
+class Blocked(Exception):
+    pass
+
+
 def _fetch_one(symbol):
     import yfinance as yf
-    info = yf.Ticker(symbol + ".NS").info or {}
+    try:
+        info = yf.Ticker(symbol + ".NS").info or {}
+    except Exception as e:
+        raise Blocked(str(e)[:120])
+    if len(info) < 5:  # Yahoo answered with nothing useful (401 / blocked)
+        raise Blocked("empty response")
     de = _num(info.get("debtToEquity"))
     return {
         "symbol": symbol, "fetched": datetime.utcnow().strftime("%Y-%m-%d"),
@@ -52,13 +62,20 @@ def refresh(symbols, max_calls=None, force=False):
         todo = todo[:max_calls]
     print(f"  fundamentals: {len(todo)} to fetch, {len(fresh)} fresh in cache")
 
-    rows = []
+    rows, fails = [], 0
     for i, sym in enumerate(todo, 1):
         try:
             rows.append(_fetch_one(sym))
-        except Exception as e:
-            print(f"  ! {sym}: {e}")
-            time.sleep(10)  # likely rate-limited, back off
+            fails = 0
+        except Blocked as e:
+            fails += 1
+            if fails == 1 or fails % 10 == 0:
+                print(f"  ! {sym}: {e}")
+            if fails >= MAX_CONSECUTIVE_FAILS:
+                print(f"  Yahoo is refusing fundamentals requests ({fails} in a row). "
+                      "Skipping fundamentals this run; prices, technicals and zones still update.")
+                break
+            time.sleep(3)
         time.sleep(FUNDAMENTALS_SLEEP_SEC)
         if i % 100 == 0 or i == len(todo):
             print(f"  fundamentals {i}/{len(todo)}")
