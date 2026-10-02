@@ -83,7 +83,7 @@ def main():
             print("5/5 news")
             news = newsmod.sector_news([s["sector"] for s in sectors])
             mover_news = newsmod.stock_news([(m["sym"], m["name"]) for m in liquid_movers])
-    movers = [{"sym": m["sym"], "r1d": m["r1d"], "news": mover_news.get(m["sym"], [])}
+    movers = [{"sym": m["sym"], "price": m.get("price"), "r1d": m["r1d"], "news": mover_news.get(m["sym"], [])}
               for m in liquid_movers]
 
     print("   zones (daily + weekly)")
@@ -95,7 +95,7 @@ def main():
         t = s["sym"] + ".NS"
         if t in zd:
             zrows.append({"sym": s["sym"], "name": s["name"], "sector": s["sector"],
-                          "liquid": s["liquid"], "r1d": s.get("r1d"), "r1w": s.get("r1w"),
+                          "liquid": s["liquid"], "price": s.get("price"), "r1d": s.get("r1d"), "r1w": s.get("r1w"),
                           "r1m": s.get("r1m"), "d": zd[t], "w": zw.get(t)})
     zones_page.render(clean({"stocks": zrows,
                              "tf": {"d": {"dates": dates_d, "lb_start": lb_d},
