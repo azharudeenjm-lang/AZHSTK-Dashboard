@@ -103,6 +103,7 @@ label.tog{font-size:.85rem;color:var(--muted);display:flex;gap:6px;align-items:c
 <div class="wrap">
 <header>
   <h1>NSE sector rotation</h1>
+  <div id="gsearch"></div>
   <nav aria-label="Dashboards" style="display:flex;gap:14px;font-size:.9rem"><a href="index.html" aria-current="page" style="color:var(--ink);font-weight:600;text-decoration:none">Sector rotation</a><a href="zones.html" style="color:var(--muted);text-decoration:none">Zones</a><a href="levels.html" style="color:var(--muted);text-decoration:none">Levels</a></nav>
   <div class="stamp" style="flex-basis:100%"><span class="bench" id="bench"></span> <span id="gen"></span></div>
 </header>
@@ -323,7 +324,7 @@ function renderStocks(focusSym){
   if (selStock){ const i=list.findIndex(s=>s.sym===selStock); if(i>0) list.unshift(...list.splice(i,1)); }
   const cols = view==="tech"?TECH:FUND, LIMIT=120, shown = showAll?list:list.slice(0,LIMIT);
   const cell = (s,k)=>{
-    if(k==="sym") return `<td class="name"><b>${esc(s.sym)}</b>${tvLink(s.sym, tf==="w"?"W":"D")}<small>${esc(s.industry&&s.industry!==s.sector?s.industry:s.name)}</small></td>`;
+    if(k==="sym") return `<td class="name"><button class="psym" data-p="${esc(s.sym)}">${esc(s.sym)}</button>${tvLink(s.sym, tf==="w"?"W":"D")}<small>${esc(s.industry&&s.industry!==s.sector?s.industry:s.name)}</small></td>`;
     if(k==="q") return `<td>${chip(s.q)}</td>`;
     if(["r1d","r1w","r1m","r3m","r1y","vs50","vs200","from_high","rev_g","eps_g"].includes(k)) return sign(s[k], k==="r1d"?2:1);
     if(k==="price") return `<td>${fmt(s.price,2)}</td>`;
@@ -368,13 +369,14 @@ q.addEventListener("keydown",e=>{ if(e.key!=="Enter") return; const v=q.value.tr
   else q.setCustomValidity("No stock matches"), q.reportValidity(), setTimeout(()=>q.setCustomValidity(""),1500); });
 
 const mv = D.movers||[];
-document.getElementById("movers").innerHTML = mv.length ? mv.map(m=>`<li><b>${esc(m.sym)}</b>${tvLink(m.sym,"D")} <span style="display:inline" class="mut">${fmt(m.price,2)}</span> <span style="display:inline" class="${m.r1d>=0?'up':'down'}">${m.r1d>0?'+':''}${fmt(m.r1d,2)}%</span>${
+document.getElementById("movers").innerHTML = mv.length ? mv.map(m=>`<li><button class="psym" data-p="${esc(m.sym)}">${esc(m.sym)}</button>${tvLink(m.sym,"D")} <span style="display:inline" class="mut">${fmt(m.price,2)}</span> <span style="display:inline" class="${m.r1d>=0?'up':'down'}">${m.r1d>0?'+':''}${fmt(m.r1d,2)}%</span>${
   m.news.length ? m.news.slice(0,2).map(n=>`<br><a href="${esc(n.u)}" target="_blank" rel="noopener">${esc(n.t)}</a><span>${esc(n.s)} ${esc(n.d)}</span>`).join("") : `<span>No headlines found.</span>`}</li>`).join("") : `<li class="empty">No mover headlines in this run.</li>`;
 
 const first = [...D.sectors].filter(s=>s.q_d).sort((a,b)=>(b.r1d??-99)-(a.r1d??-99))[0] || D.sectors[0];
 openSector(first.sector, null, true);
 let rz; addEventListener("resize",()=>{clearTimeout(rz); rz=setTimeout(()=>openSector(cur, selStock, !picked),200);});
 </script>
+<script src="profile.js" defer></script>
 </body>
 </html>
 """
