@@ -5,13 +5,14 @@
   python run.py --demo          # offline test with synthetic data
 """
 import argparse
+from datetime import datetime, timedelta, timezone
 import math
 import sys
 import time
 
 import pandas as pd
 
-from src import analytics, dashboard, levels, levels_page, profiles, zones, zones_page
+from src import analytics, backtest, backtest_page, dashboard, levels, levels_page, profiles, zones, zones_page
 from src.config import BENCHMARK, NEWS_TOP_MOVERS
 
 
@@ -32,6 +33,7 @@ def main():
     ap.add_argument("--max-fund", type=int, default=None, help="cap fundamentals calls this run")
     ap.add_argument("--no-news", action="store_true")
     ap.add_argument("--demo", action="store_true", help="synthetic data, no internet needed")
+    ap.add_argument("--backtest", action="store_true", help="rerun the weekly zone backtest (slow, weekly)")
     a = ap.parse_args()
     t0 = time.time()
 
@@ -90,6 +92,9 @@ def main():
     tick = universe["ticker"].tolist()
     zd, dates_d, lb_d, hd = zones.build_zones(px["Close"], px["High"], px["Low"], tick, "d", history=True)
     zw, dates_w, lb_w, hw = zones.build_zones(px["Close"], px["High"], px["Low"], tick, "w", history=True)
+    today = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d")
+    asof = px["Close"].index[-1].strftime("%Y-%m-%d")
+    partial = bool(dates_w) and dates_w[-1] > today      # this week's Friday hasn't come yet
     zrows = []
     for s in stocks:
         t = s["sym"] + ".NS"
@@ -114,18 +119,30 @@ def main():
         for tf in ("d", "w"):
             if r.get(tf) and "ch" in r[tf]:
                 charts.setdefault(r["sym"], {})[tf] = r[tf].pop("ch")
-    levels_page.render(clean({"stocks": lrows}), clean(charts))
+    levels_page.render(clean({"stocks": lrows, "partial": partial, "asof": asof}), clean(charts))
     print("   stock profiles")
-    from datetime import datetime, timedelta, timezone
     gen = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%d %b %Y, %I:%M %p IST")
     profiles.write(clean(stocks), clean(sectors), clean({"d": zd, "w": zw}), clean({"d": hd, "w": hw}),
-                   clean({"d": ld, "w": lw}), fmap, {"d": dates_d, "w": dates_w}, gen)
+                   clean({"d": ld, "w": lw}), fmap, {"d": dates_d, "w": dates_w}, gen,
+                   {"partial": partial, "asof": asof})
     zones_page.render(clean({"stocks": zrows,
                              "tf": {"d": {"dates": dates_d, "lb_start": lb_d},
-                                    "w": {"dates": dates_w, "lb_start": lb_w}}}))
+                                    "w": {"dates": dates_w, "lb_start": lb_w,
+                                          "partial": partial, "asof": asof}}}))
 
     out = dashboard.render(clean({"sectors": sectors, "stocks": stocks, "bench": bench,
                                   "news": news, "movers": movers}))
+    if a.backtest:
+        print("   backtest (weekly, 10 years)")
+        if a.demo:
+            wk = {f: (px[f].resample("W-FRI").last() if f == "Close" else
+                      px[f].resample("W-FRI").max() if f == "High" else
+                      px[f].resample("W-FRI").min() if f == "Low" else
+                      px[f].resample("W-FRI").sum()) for f in ("Close", "High", "Low", "Volume")}
+        else:
+            wk = backtest.download_weekly(universe["ticker"].tolist(), BENCHMARK)
+        backtest_page.render(clean(backtest.run(wk, universe, BENCHMARK)))
+    backtest_page.publish()
     print(f"done in {time.time() - t0:.0f}s -> {out}")
 
 
