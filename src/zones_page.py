@@ -128,6 +128,7 @@ dt{font-weight:600} dd{margin:0;color:var(--muted);max-width:70ch}
 <div class="wrap">
 <header>
   <h1>NSE technical zones</h1>
+  <div id="gsearch"></div>
   <nav aria-label="Dashboards"><a href="index.html">Sector rotation</a><a href="zones.html" aria-current="page">Zones</a><a href="levels.html">Levels</a></nav>
 </header>
 <div style="display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;margin:0 0 14px">
@@ -250,7 +251,7 @@ function drawCycle(){
 
 function drawNew(){
   const nd = period;
-  document.getElementById("new-sub").textContent = `Stocks that moved into their current zone in the last ${unitsN(nd)} and are still in it, newest first. Tap one to find it in the table.`;
+  document.getElementById("new-sub").textContent = `Stocks that moved into their current zone in the last ${unitsN(nd)} and are still in it, newest first. Tap one to see its full history.`;
   const list = base().filter(s=>entered(s) && (!zoneF || s.zone===zoneF));
   const by = {}; list.forEach(s=>(by[s.since] ??= []).push(s));
   const keys = Object.keys(by).sort().reverse();
@@ -269,7 +270,7 @@ function drawNew(){
           const key = d+"|"+z+"|"+pv, CAP = 18, full = openDays.has(key) || list.length <= CAP;
           list.sort((a,b)=>a.sym.localeCompare(b.sym));
           return `<div class="fg"><span class="fg-h">from ${esc(pv)} <span class="mut">${list.length}</span></span><div class="ent">${
-            (full?list:list.slice(0,CAP)).map(s=>`<button data-sym="${esc(s.sym)}" style="--c:${zc(z)}" title="${esc(s.name)}"><i style="--c:${zc(pv)}"></i><b>${esc(s.sym)}</b></button>`).join("")}${
+            (full?list:list.slice(0,CAP)).map(s=>`<button data-p="${esc(s.sym)}" style="--c:${zc(z)}" title="${esc(s.name)}"><i style="--c:${zc(pv)}"></i><b>${esc(s.sym)}</b></button>`).join("")}${
             full ? "" : `<button class="more" data-day="${esc(key)}" style="margin:0">Show all ${list.length}</button>`}</div></div>`; }).join("") + `</div>`;
     });
     return `<div class="day"><h3>${head} <span>${tag}, ${items.length} ${items.length===1?"stock":"stocks"}</span></h3>${inner}</div>`;
@@ -287,7 +288,7 @@ function strip(full){
     [...code].map((c,i)=>`<rect x="${i*(w+gap)}" y="1" width="${w}" height="12" rx="1" fill="${zc(CODE[c])}"><title>${dlabel(dates[dates.length-n+i])}: ${CODE[c]}</title></rect>`).join("")}</svg>`;
 }
 
-const cols = () => [["sym","Stock"],["price","Price"],["zone","Zone","l"],["since",tf==="d"?"Since":"Since week of","l"],["days",P.units[0].toUpperCase()+P.units.slice(1)],["prev","Came from","l"],["strip",`Last ${unitsN(period)}`,"l"],
+const cols = () => [["sym","Stock"],["price","Price"],["zone","Zone","l"],["since",tf==="d"?"Since":"Since week of","l"],["days",P.units[0].toUpperCase()+P.units.slice(1)],["prev","Came from","l"],["entry","Entry price"],["move","Since entry %"],["strip",`Last ${unitsN(period)}`,"l"],
   ["rsi","RSI"],["macd_x","MACD","l"],["adx","ADX"],["di","+DI / −DI"],["chop","Chop"],["cloud","Cloud","l"],["stretch",tf==="d"?`vs ${P.ma}-DMA %`:`vs ${P.ma}-WMA %`],
   tf==="d"?["r1d","1D %"]:["r1w","1W %"],["r1m","1M %"]];
 function drawTable(){
@@ -306,11 +307,13 @@ function drawTable(){
   const t = document.getElementById("t"), COLS = cols();
   const cell = (s,k) => {
     switch(k){
-      case "sym": return `<td class="name"><b>${esc(s.sym)}</b>${tvLink(s.sym, tf==="w"?"W":"D")}<small>${esc(s.sector)}</small></td>`;
+      case "sym": return `<td class="name"><button class="psym" data-p="${esc(s.sym)}">${esc(s.sym)}</button>${tvLink(s.sym, tf==="w"?"W":"D")}<small>${esc(s.sector)}</small></td>`;
       case "price": return `<td>${fmt(s.price,2)}</td>`;
       case "zone": return `<td class="l">${chip(s.zone)}${s.new?' <small class="mut">new</small>':''}</td>`;
       case "since": return `<td class="l">${s.capped ? `<span class="mut">before ${dlabel(D.tf[tf].lb_start)}</span>` : dlabel(s.since)}</td>`;
       case "days": return `<td>${s.capped ? P.lookback+"+" : s.days}</td>`;
+      case "entry": return `<td>${fmt(s.entry,2)}</td>`;
+      case "move": return sgn(s.move,1);
       case "prev": return `<td class="l ${s.prev?'':'mut'}">${esc(s.prev||"–")}</td>`;
       case "strip": return `<td class="l">${strip(s.strip||"")}</td>`;
       case "rsi": return `<td class="${s.rsi>=70?'down':s.rsi<=30?'up':''}">${fmt(s.rsi,0)}</td>`;
@@ -369,6 +372,7 @@ document.getElementById("legend").innerHTML = [...ORDER,"Neutral"].map(z=>`<span
 document.querySelectorAll("[data-tf]").forEach(b=>b.addEventListener("click",()=>{ openDays.clear(); hl=null; setTF(b.dataset.tf); }));
 setTF("d");
 </script>
+<script src="profile.js" defer></script>
 </body>
 </html>
 """
