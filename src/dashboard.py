@@ -73,7 +73,7 @@ th[aria-sort="ascending"]::after{content:" ↑"}
 tbody tr{cursor:pointer}
 tbody tr:hover td{background:color-mix(in srgb,var(--line) 35%,var(--panel))}
 tr.on td{background:color-mix(in srgb,var(--impr) 12%,var(--panel))}
-.up{color:var(--up)}.down{color:var(--down)}
+.up{color:var(--up)}.down{color:var(--down)}.mut{color:var(--muted)}
 .chip{display:inline-block;padding:1px 8px;border-radius:999px;font-size:.75rem;font-weight:600;color:#fff}
 .q-Leading{background:var(--lead)}.q-Weakening{background:var(--weak)}.q-Lagging{background:var(--lag)}.q-Improving{background:var(--impr)}
 .name small{display:block;color:var(--muted);font-size:.75rem;max-width:180px;overflow:hidden;text-overflow:ellipsis}
@@ -90,6 +90,8 @@ label.tog{font-size:.85rem;color:var(--muted);display:flex;gap:6px;align-items:c
 .empty{color:var(--muted);font-size:.88rem;padding:8px 0}
 .kpis{display:flex;flex-wrap:wrap;gap:6px 20px;font-size:.86rem;color:var(--muted);margin-bottom:12px}
 .kpis b{color:var(--ink);font-weight:600}
+.tv{font-size:.72rem;font-weight:600;color:var(--focus,var(--impr));text-decoration:none;border:1px solid currentColor;border-radius:6px;padding:0 5px;margin-left:6px;vertical-align:1px}
+.tv:hover{background:color-mix(in srgb,currentColor 12%,transparent)}
 .note{color:var(--muted);font-size:.78rem;margin-top:24px;max-width:72ch}
 </style>
 </head>
@@ -175,6 +177,8 @@ const qcol = q => q ? css(QC[q]) : css("--muted");
 const fmt = (v,d=1) => v==null ? "–" : Number(v).toLocaleString("en-IN",{minimumFractionDigits:d,maximumFractionDigits:d});
 const sign = (v,d=1) => v==null ? "<td>–</td>" : `<td class="${v>0?'up':v<0?'down':''}">${v>0?'+':''}${fmt(v,d)}</td>`;
 const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const tv = (sym, iv) => "https://www.tradingview.com/chart/?symbol=" + encodeURIComponent("NSE:" + sym.replace(/[&-]/g,"_")) + (iv ? "&interval=" + iv : "");
+const tvLink = (sym, iv) => `<a class="tv" href="${tv(sym, iv)}" target="_blank" rel="noopener" aria-label="Open ${esc(sym)} chart on TradingView" onclick="event.stopPropagation()">Chart</a>`;
 const chip = q => q ? `<span class="chip q-${q}">${q}</span>` : "–";
 
 let tf = "d", view = "tech", cur = null, showAll = false;
@@ -247,7 +251,7 @@ function renderSectorTable(){
 
 /* ---------- detail ---------- */
 const TECH = [["sym","Stock"],["price","Price"],["r1d","1D %"],["r1w","1W %"],["r1m","1M %"],["r3m","3M %"],["rsi","RSI"],["vs50","vs 50DMA"],["vs200","vs 200DMA"],["from_high","From 52w high"],["vol_x","Volume ×"],["q","RRG"]];
-const FUND = [["sym","Stock"],["mcap_cr","Mcap ₹cr"],["pe","P/E"],["pb","P/B"],["roe","ROE %"],["de","Debt/Eq"],["margin","Net margin %"],["rev_g","Revenue growth %"],["eps_g","Earnings growth %"],["r1y","1Y %"]];
+const FUND = [["sym","Stock"],["price","Price"],["mcap_cr","Mcap ₹cr"],["pe","P/E"],["pb","P/B"],["roe","ROE %"],["de","Debt/Eq"],["margin","Net margin %"],["rev_g","Revenue growth %"],["eps_g","Earnings growth %"],["r1y","1Y %"]];
 function openSector(sec, focusSym){
   cur = sec; showAll = false;
   const s = D.sectors.find(x=>x.sector===sec) || {};
@@ -274,7 +278,7 @@ function renderStocks(focusSym){
   if (selStock){ const i=list.findIndex(s=>s.sym===selStock); if(i>0) list.unshift(...list.splice(i,1)); }
   const cols = view==="tech"?TECH:FUND, LIMIT=120, shown = showAll?list:list.slice(0,LIMIT);
   const cell = (s,k)=>{
-    if(k==="sym") return `<td class="name"><b>${esc(s.sym)}</b><small>${esc(s.industry&&s.industry!==s.sector?s.industry:s.name)}</small></td>`;
+    if(k==="sym") return `<td class="name"><b>${esc(s.sym)}</b>${tvLink(s.sym, tf==="w"?"W":"D")}<small>${esc(s.industry&&s.industry!==s.sector?s.industry:s.name)}</small></td>`;
     if(k==="q") return `<td>${chip(s.q)}</td>`;
     if(["r1d","r1w","r1m","r3m","r1y","vs50","vs200","from_high","rev_g","eps_g"].includes(k)) return sign(s[k], k==="r1d"?2:1);
     if(k==="price") return `<td>${fmt(s.price,2)}</td>`;
@@ -319,7 +323,7 @@ q.addEventListener("keydown",e=>{ if(e.key!=="Enter") return; const v=q.value.tr
   else q.setCustomValidity("No stock matches"), q.reportValidity(), setTimeout(()=>q.setCustomValidity(""),1500); });
 
 const mv = D.movers||[];
-document.getElementById("movers").innerHTML = mv.length ? mv.map(m=>`<li><b>${esc(m.sym)}</b> <span style="display:inline" class="${m.r1d>=0?'up':'down'}">${m.r1d>0?'+':''}${fmt(m.r1d,2)}%</span>${
+document.getElementById("movers").innerHTML = mv.length ? mv.map(m=>`<li><b>${esc(m.sym)}</b>${tvLink(m.sym,"D")} <span style="display:inline" class="mut">${fmt(m.price,2)}</span> <span style="display:inline" class="${m.r1d>=0?'up':'down'}">${m.r1d>0?'+':''}${fmt(m.r1d,2)}%</span>${
   m.news.length ? m.news.slice(0,2).map(n=>`<br><a href="${esc(n.u)}" target="_blank" rel="noopener">${esc(n.t)}</a><span>${esc(n.s)} ${esc(n.d)}</span>`).join("") : `<span>No headlines found.</span>`}</li>`).join("") : `<li class="empty">No mover headlines in this run.</li>`;
 
 const first = [...D.sectors].filter(s=>s.q_d).sort((a,b)=>(b.r1d??-99)-(a.r1d??-99))[0] || D.sectors[0];
