@@ -96,3 +96,14 @@ BACKTEST = {
     "cost_pct": 0.3,           # round-trip brokerage + taxes + slippage, in %
     "min_turnover_cr": 1.0,    # liquid at entry: avg daily traded value, Rs crore
 }
+
+# ---------- Trade setups (setups.html): monthly filter, weekly setup, daily timing ----------
+SETUP = {
+    "monthly_ma": 10,          # price above its 10-month average
+    "monthly_rsi": 50,         # monthly RSI at or above this
+    "fresh_weeks": 4,          # "fresh trend" = entered weekly Bullish from Accumulation within this many weeks
+    "daily_rsi_hot": 70,       # daily RSI at or above this = wait for a dip
+    "min_stop_pct": 1.5,       # ignore stop levels closer than this
+    "max_stop_pct": 15,        # cap: stops further than this make the trade too wide
+    "good_rr": 2.0,            # reward-to-risk to the next weekly resistance
+}

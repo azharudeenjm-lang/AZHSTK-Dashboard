@@ -19,7 +19,7 @@ def _shard(sym):
     return k or "0"
 
 
-def write(stocks, sectors, zones, hists, lvls, fund, dates, generated, live=None):
+def write(stocks, sectors, zones, hists, lvls, fund, dates, generated, live=None, setups=None, monthly=None):
     """zones/hists/lvls: {"d": {ticker: ...}, "w": {...}}; fund: {sym: {...}}."""
     secq = {s["sector"]: {"d": s.get("q_d"), "w": s.get("q_w")} for s in sectors}
     index, shards = [], defaultdict(dict)
@@ -47,6 +47,10 @@ def write(stocks, sectors, zones, hists, lvls, fund, dates, generated, live=None
                 prof["z"][tf] = keep
             if lvls[tf].get(t):
                 prof["lv"][tf] = lvls[tf][t]
+        if setups and t in setups:
+            prof["su"] = setups[t]
+        if monthly and t in monthly:
+            prof["m"] = monthly[t]
         shards[_shard(sym)][sym] = prof
 
     DOCS.mkdir(parents=True, exist_ok=True)

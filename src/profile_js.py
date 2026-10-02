@@ -57,6 +57,12 @@ dialog.prof::backdrop{background:rgba(10,16,26,.55)}
 .pf-kv div{display:flex;justify-content:space-between;gap:8px;border-bottom:1px dashed var(--line);padding:4px 0}
 .pf-kv span{color:var(--muted)}
 .pf-load{padding:40px;text-align:center;color:var(--muted)}
+.pf-su{display:grid;gap:8px;grid-template-columns:minmax(0,1fr);border:1px solid var(--line);border-left:5px solid var(--c);border-radius:12px;padding:10px 12px;margin:0 0 12px}
+@media(min-width:760px){.pf-su{grid-template-columns:minmax(150px,auto) repeat(3,minmax(0,1fr))}}
+.pf-su .hd b{display:block;font-size:1.05rem}.pf-su .hd small{color:var(--muted);font-size:.78rem}
+.pf-su .it{font-size:.84rem;display:flex;gap:6px}.pf-su .it i{font-style:normal;font-weight:700;width:16px;text-align:center}
+.pf-su .it small{display:block;color:var(--muted);font-size:.76rem}
+.pf-ok{color:var(--up,#1E8F5A)}.pf-mid{color:#C9780F}.pf-bad{color:var(--down,#C2453B)}
 `;
 const st = document.createElement("style"); st.textContent = CSS; document.head.appendChild(st);
 
@@ -134,11 +140,44 @@ async function openProfile(sym){
   if (curSym!==sym) return;
   if (!p){ dlg.innerHTML = `<div class="pf"><div class="pf-h"><h2 id="pf-title">${esc(sym)}</h2><button class="pf-x" aria-label="Close">×</button></div><p class="pf-load">No data for this stock yet.</p></div>`;
     dlg.querySelector(".pf-x").onclick=()=>dlg.close(); return; }
-  curData = p; if (!p.z[curTF]) curTF = p.z.w ? "w" : "d";
+  curData = p; if (curTF!=="m" && !p.z[curTF]) curTF = p.z.w ? "w" : "d";
   render();
 }
 window.openProfile = openProfile;
 
+const BKC = {"Ready":"--pq-lead","Setting up":"--pq-impr","Watchlist":"--pz-os","Avoid":"--pq-lag"};
+const mk = st => st==="OK"||st==="Good" ? ['✓','pf-ok'] : st==="Mixed"||st==="Wait"||st==="Neutral" ? ['~','pf-mid'] : st==="No data" ? ['?','pf-mut'] : ['✗','pf-bad'];
+function setupStrip(su){
+  if (!su) return "";
+  const it = (st, t, d) => { const [i,c]=mk(st); return `<div class="it"><i class="${c}">${i}</i><div>${esc(t)}<small>${esc(d)}</small></div></div>`; };
+  const b = su.bucket || "No setup";
+  return `<div class="pf-su" style="--c:var(${BKC[b]||'--pz-neu'})"><div class="hd"><b>${esc(b)}</b><small>${esc(su.why || "no multi-timeframe setup right now")}</small>
+      ${su.stop?`<small style="display:block">stop ₹${fmt(su.stop,2)} (−${fmt(su.stop_pct)}%)${su.rr!=null?` · R:R ${fmt(su.rr)}×`:""}</small>`:""}</div>
+    ${it(su.mon, {OK:"Monthly uptrend",Mixed:"Monthly mixed",Weak:"Monthly weak"}[su.mon]||"No monthly data", su.mon_txt)}
+    ${it(su.wk_ok?"OK":su.wk==="Base"||su.wk==="In trend"?"Mixed":"Weak", "Weekly: "+(su.wk||"no setup"), su.wk_txt)}
+    ${it(su.day, "Daily: "+(su.day==="Good"?"timing good":su.day.toLowerCase()), su.day_txt)}</div>`;
+}
+function renderMonthly(p, s){
+  const m = p.m;
+  const body = !m || !m.c || m.c.length < 2 ? '<p class="pf-mut">Not enough monthly history.</p>' : (()=>{
+    const c = m.c, n = c.length, W = Math.round(Math.max(340, Math.min(900, (dlg.clientWidth||900) - 32))), H = Math.round(Math.max(200, W*0.3)), P = {l:6,r:58,t:10,b:22};
+    const vals = [...c, ...m.sma.filter(v=>v!=null)]; let lo = Math.min(...vals), hi = Math.max(...vals); const g0=(hi-lo)*0.06||1; lo-=g0; hi+=g0;
+    const X = i => P.l + i/(n-1)*(W-P.l-P.r), Y = v => P.t + (hi-v)/(hi-lo)*(H-P.t-P.b);
+    const path = arr => { let d="", pen=false; arr.forEach((v,i)=>{ if(v==null){pen=false;return;} d+=`${pen?"L":"M"}${X(i).toFixed(1)},${Y(v).toFixed(1)}`; pen=true; }); return d; };
+    let g = `<path d="${path(m.sma)}" fill="none" stroke="var(--pq-impr)" stroke-width="1.6" stroke-dasharray="5 4"/>`;
+    g += `<path d="${path(c)}" fill="none" stroke="var(--ink)" stroke-width="1.8" stroke-linejoin="round"/>`;
+    g += `<text x="${W-P.r+4}" y="${Y(c[n-1])+4}" font-size="11" font-weight="700" fill="var(--ink)">${fmt(c[n-1], c[n-1]<100?2:0)}</text>`;
+    const lab = d => new Date(d+"-01T00:00:00").toLocaleDateString("en-IN",{month:"short",year:"2-digit"});
+    [0, Math.floor((n-1)/2), n-1].forEach((i,k)=>{ g += `<text x="${X(i)}" y="${H-6}" font-size="11" fill="var(--muted)" text-anchor="${["start","middle","end"][k]}">${lab(m.d[i])}</text>`; });
+    return `<svg class="pf-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Monthly closes with 10-month average">${g}</svg>
+      <div class="pf-key"><span><i style="--c:var(--ink)"></i>Monthly close</span><span><i style="--c:var(--pq-impr)"></i>10-month average</span></div>`; })();
+  const chk = m ? [["Above 10-month average", m.chk.ma],["Monthly RSI 50 or higher"+(m.rsi!=null?` (${fmt(m.rsi,0)})`:""), m.chk.rsi],["Monthly MACD rising", m.chk.macd]] : [];
+  return `<div class="pf-cards" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
+      <div class="pf-card"><h3>Monthly trend</h3><div class="big">${esc(m ? ({OK:"Uptrend",Mixed:"Mixed",Weak:"Weak"}[m.status]||m.status) : "No data")}</div><small>${esc(m ? m.txt : "")}</small></div>
+      <div class="pf-card"><h3>Checks</h3>${chk.map(([t,ok])=>`<small class="${ok?'pf-ok':'pf-bad'}">${ok?'✓':'✗'} ${esc(t)}</small>`).join("")}</div></div>
+    <div class="pf-sec"><h3>Last 5 years, monthly</h3>${body}</div>
+    <p class="pf-mut" style="font-size:.8rem">The monthly view is a trend filter only. Zones and levels are calculated on daily and weekly bars. The current month is included while it is still forming.</p>`;
+}
 function render(){
   const p = curData, s = curSym, tf = curTF, z = p.z[tf] || {}, lv = p.lv[tf] || {};
   const U = tf==="d" ? ["session","sessions"] : ["week","weeks"], u = n => `${n} ${n===1?U[0]:U[1]}`;
@@ -151,10 +190,11 @@ function render(){
     <div class="pf-px">₹${fmt(p.px,2)} <span>${pct(p.r1d,2)} today</span></div></div>
     <button class="pf-x" aria-label="Close">×</button></div>
   <div class="pf-bar"><div class="pf-seg" role="group" aria-label="Timeframe">
-      <button data-t="d" aria-pressed="${tf==="d"}">Daily</button><button data-t="w" aria-pressed="${tf==="w"}">Weekly</button></div>
-    <span class="pf-lk"><a href="${tvurl(s, tf==="w"?"W":"D")}" target="_blank" rel="noopener">TradingView</a><a href="${scrurl(s)}" target="_blank" rel="noopener">Screener</a></span></div>
+      <button data-t="d" aria-pressed="${tf==="d"}">Daily</button><button data-t="w" aria-pressed="${tf==="w"}">Weekly</button><button data-t="m" aria-pressed="${tf==="m"}">Monthly</button></div>
+    <span class="pf-lk"><a href="${tvurl(s, tf==="m"?"M":tf==="w"?"W":"D")}" target="_blank" rel="noopener">TradingView</a><a href="${scrurl(s)}" target="_blank" rel="noopener">Screener</a></span></div>
 
-  ${tf==="w" && IDX && IDX.partial ? `<p class="pf-mut" style="font-size:.8rem;margin:0 0 10px">This week is still forming (prices up to ${dl(IDX.asof)}), so the weekly zone can change until Friday's close.</p>` : ""}
+  ${setupStrip(p.su)}
+  ${tf==="m" ? renderMonthly(p, s) : `  ${tf==="w" && IDX && IDX.partial ? `<p class="pf-mut" style="font-size:.8rem;margin:0 0 10px">This week is still forming (prices up to ${dl(IDX.asof)}), so the weekly zone can change until Friday's close.</p>` : ""}
   <div class="pf-cards">
     <div class="pf-card"><h3>Technical zone</h3><div>${zchip(z.zone)}</div><small>${sinceTxt}</small>${z.prev?`<small>came from ${esc(z.prev)}</small>`:""}</div>
     <div class="pf-card"><h3>Since entering the zone</h3><div class="big">${pct(z.move)}</div><small>entry ₹${fmt(z.entry,2)} → now ₹${fmt(p.px,2)}</small>${cur&&cur[6]!=null?`<small>best ${pct(cur[6])} · worst ${pct(cur[7])}</small>`:""}</div>
@@ -189,7 +229,7 @@ function render(){
     <div><span>1M</span><b>${pct(p.r1m)}</b></div><div><span>1Y</span><b>${pct(p.r1y)}</b></div>
     <div><span>P/E</span><b>${fmt(p.f.pe)}</b></div><div><span>ROE</span><b>${p.f.roe!=null?fmt(p.f.roe)+"%":"–"}</b></div>
     <div><span>Debt/Equity</span><b>${fmt(p.f.de,2)}</b></div><div><span>Mcap</span><b>${p.f.mcap_cr!=null?"₹"+fmt(p.f.mcap_cr,0)+" cr":"–"}</b></div>
-  </div></div>
+  </div></div>`}
   </div>`;
   dlg.querySelector(".pf-x").onclick = () => dlg.close();
   dlg.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{ curTF=b.dataset.t; render(); });

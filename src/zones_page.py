@@ -46,7 +46,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 var(--font);f
 .wrap{max-width:1180px;margin:0 auto;padding:16px 14px 48px}
 header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 16px;margin-bottom:6px}
 h1{font-size:1.55rem;font-weight:700;letter-spacing:-.01em;margin:0}
-nav{display:flex;gap:14px;font-size:.9rem}
+nav{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.9rem}
 nav a{color:var(--muted);text-decoration:none}
 nav a[aria-current]{color:var(--ink);font-weight:600}
 .stamp{color:var(--muted);font-size:.85rem;margin:0 0 14px}
@@ -130,7 +130,7 @@ button.tv{background:transparent;font-family:inherit;line-height:inherit;cursor:
 <header>
   <h1>NSE technical zones</h1>
   <div id="gsearch"></div>
-  <nav aria-label="Dashboards"><a href="index.html">Sector rotation</a><a href="zones.html" aria-current="page">Zones</a><a href="levels.html">Levels</a><a href="backtest.html">Backtest</a></nav>
+  <nav aria-label="Dashboards"><a href="index.html">Sector rotation</a><a href="zones.html" aria-current="page">Zones</a><a href="levels.html">Levels</a><a href="setups.html">Setups</a><a href="backtest.html">Backtest</a></nav>
 </header>
 <div style="display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;margin:0 0 14px">
   <p class="stamp" id="gen" style="margin:0"></p>

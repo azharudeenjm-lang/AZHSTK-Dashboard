@@ -105,7 +105,7 @@ button.tv{background:transparent;font-family:inherit;line-height:inherit;cursor:
 <header>
   <h1>NSE sector rotation</h1>
   <div id="gsearch"></div>
-  <nav aria-label="Dashboards" style="display:flex;gap:14px;font-size:.9rem"><a href="index.html" aria-current="page" style="color:var(--ink);font-weight:600;text-decoration:none">Sector rotation</a><a href="zones.html" style="color:var(--muted);text-decoration:none">Zones</a><a href="levels.html" style="color:var(--muted);text-decoration:none">Levels</a><a href="backtest.html" style="color:var(--muted);text-decoration:none">Backtest</a></nav>
+  <nav aria-label="Dashboards" style="display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.9rem"><a href="index.html" aria-current="page" style="color:var(--ink);font-weight:600;text-decoration:none">Sector rotation</a><a href="zones.html" style="color:var(--muted);text-decoration:none">Zones</a><a href="levels.html" style="color:var(--muted);text-decoration:none">Levels</a><a href="setups.html" style="color:var(--muted);text-decoration:none">Setups</a><a href="backtest.html" style="color:var(--muted);text-decoration:none">Backtest</a></nav>
   <div class="stamp" style="flex-basis:100%"><span class="bench" id="bench"></span> <span id="gen"></span></div>
 </header>
 
