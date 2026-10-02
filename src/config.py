@@ -82,3 +82,17 @@ LEVEL_PARAMS = {
           "retest": 8, "brk": 0.015, "near": 0.05, "near_tl": 0.04,
           "vol_x": 1.5, "chart": 104},
 }
+
+# Weekly views (zones, levels, profiles) include the week in progress, so a
+# stock that enters a zone on Monday shows up the same day. The weekly zone can
+# still change until Friday's close. Set False to use completed weeks only.
+# (The backtest always uses completed weeks.)
+WEEKLY_LIVE = True
+
+# ---------- Backtest (backtest.html) ----------
+BACKTEST = {
+    "history": "10y",          # weekly bars downloaded straight from Yahoo
+    "floors": [55, 60, 65],    # Danger zone RSI floors to compare
+    "cost_pct": 0.3,           # round-trip brokerage + taxes + slippage, in %
+    "min_turnover_cr": 1.0,    # liquid at entry: avg daily traded value, Rs crore
+}

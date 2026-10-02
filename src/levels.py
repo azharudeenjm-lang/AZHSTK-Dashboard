@@ -22,7 +22,7 @@ How it works, per stock and timeframe:
 import numpy as np
 import pandas as pd
 
-from .config import LEVEL_PARAMS
+from .config import LEVEL_PARAMS, WEEKLY_LIVE
 
 BULLISH = ["Breakout", "Trendline breakout", "Retest", "At trendline support", "Near support"]
 BEARISH = ["Breakdown", "Trendline breakdown", "Near resistance"]
@@ -35,7 +35,7 @@ def weekly(close, high, low, volume, today=None):
     l = low.resample("W-FRI").min()
     v = volume.resample("W-FRI").sum(min_count=1)
     today = pd.Timestamp(today or pd.Timestamp.now(tz="Asia/Kolkata").date())
-    done = c.index <= today
+    done = (c.index <= today) | WEEKLY_LIVE   # live: keep the week in progress
     keep = c[done].notna().any(axis=1)
     return [x[done][keep] for x in (c, h, l, v)]
 

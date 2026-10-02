@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 
 from .config import (ADX_TREND, CHOP_RANGE, CHOP_TRENDING, RSI_OVERBOUGHT,
-                     RSI_OVERSOLD, ZONE_PARAMS)
+                     RSI_OVERSOLD, WEEKLY_LIVE, ZONE_PARAMS)
 
 CODE = {"Oversold": "O", "Overbought": "B", "Danger zone": "D", "Bullish": "U",
         "Bearish": "R", "Accumulation": "A", "Neutral": "N", "No data": "-"}
@@ -31,13 +31,18 @@ INSTANT = {"O", "B", "D"}  # these start and end on the bar their condition flip
 
 
 # ---------- bars ----------
-def weekly_bars(close, high, low, today=None):
-    """Friday-ending weekly OHLC from daily data, completed weeks only."""
+def weekly_bars(close, high, low, today=None, live=None):
+    """Friday-ending weekly OHLC from daily data.
+
+    live=True keeps the week in progress (its close is the latest daily close);
+    live=False keeps completed weeks only. Default comes from WEEKLY_LIVE.
+    """
+    live = WEEKLY_LIVE if live is None else live
     c = close.resample("W-FRI").last()
     h = high.resample("W-FRI").max()
     l = low.resample("W-FRI").min()
     today = pd.Timestamp(today or pd.Timestamp.now(tz="Asia/Kolkata").date())
-    done = c.index <= today          # a week counts once its Friday has arrived
+    done = (c.index <= today) | bool(live)   # live: also keep the week in progress
     c, h, l = c[done], h[done], l[done]
     keep = c.notna().any(axis=1)     # drop holiday-only weeks
     return c[keep], h[keep], l[keep]

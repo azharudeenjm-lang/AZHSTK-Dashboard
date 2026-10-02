@@ -154,6 +154,7 @@ function render(){
       <button data-t="d" aria-pressed="${tf==="d"}">Daily</button><button data-t="w" aria-pressed="${tf==="w"}">Weekly</button></div>
     <span class="pf-lk"><a href="${tvurl(s, tf==="w"?"W":"D")}" target="_blank" rel="noopener">TradingView</a><a href="${scrurl(s)}" target="_blank" rel="noopener">Screener</a></span></div>
 
+  ${tf==="w" && IDX && IDX.partial ? `<p class="pf-mut" style="font-size:.8rem;margin:0 0 10px">This week is still forming (prices up to ${dl(IDX.asof)}), so the weekly zone can change until Friday's close.</p>` : ""}
   <div class="pf-cards">
     <div class="pf-card"><h3>Technical zone</h3><div>${zchip(z.zone)}</div><small>${sinceTxt}</small>${z.prev?`<small>came from ${esc(z.prev)}</small>`:""}</div>
     <div class="pf-card"><h3>Since entering the zone</h3><div class="big">${pct(z.move)}</div><small>entry ₹${fmt(z.entry,2)} → now ₹${fmt(p.px,2)}</small>${cur&&cur[6]!=null?`<small>best ${pct(cur[6])} · worst ${pct(cur[7])}</small>`:""}</div>
@@ -169,7 +170,7 @@ function render(){
     <ul class="tl">${segs.slice().reverse().map((g,i)=>{ const name = CODE[g[0]], now = i===0;
       const mv = g[4] && g[5] ? (g[5]/g[4]-1)*100 : null;
       return `<li style="--c:var(${ZC[name]})"><span class="rail"></span>
-        <div class="when">${zchip(name)} ${now?'<b> now</b>':''}<small>${g[8]?`before ${dl(g[1])}`:dl(g[1])} → ${now?"today":dl(g[2])} · ${u(g[3])}</small>
+        <div class="when">${zchip(name)} ${now?'<b> now</b>':''}<small>${g[8]?`before ${dl(g[1])}`:(tf==="w"?"week of "+dl(g[1]):dl(g[1]))} → ${now?"today":dl(g[2])} · ${u(g[3])}${now && tf==="w" && IDX && IDX.partial ? " (this week in progress)" : ""}</small>
           <small>entry ₹${fmt(g[4],2)} → ${now?"now":"exit"} ₹${fmt(g[5],2)}</small></div>
         <div class="mv"><b>${pct(mv)}</b><small>best ${pct(g[6])}</small><small>worst ${pct(g[7])}</small></div></li>`; }).join("") || '<li class="pf-mut">No zone history yet.</li>'}</ul></div>
 

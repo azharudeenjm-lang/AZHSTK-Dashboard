@@ -89,6 +89,7 @@ tr.big td{padding:10px 8px 14px;background:var(--panel);white-space:normal}
 .up{color:var(--up)}.down{color:var(--down)}.mut{color:var(--muted)}
 .lv b{font-weight:600}.lv small{display:block;color:var(--muted);font-size:.74rem}
 .lk{white-space:nowrap}
+button.tv{background:transparent;font-family:inherit;line-height:inherit;cursor:pointer}
 .tv{font-size:.72rem;font-weight:600;color:var(--focus);text-decoration:none;border:1px solid currentColor;border-radius:6px;padding:0 5px;margin-left:6px;vertical-align:1px}
 .tv:hover{background:color-mix(in srgb,currentColor 12%,transparent)}
 .bigc{display:block;width:100%;max-width:760px;height:auto;position:sticky;left:8px}
@@ -108,7 +109,7 @@ dt{font-weight:600} dd{margin:0;color:var(--muted);max-width:70ch}
 <header>
   <h1>Support, resistance and trendlines</h1>
   <div id="gsearch"></div>
-  <nav aria-label="Dashboards"><a href="index.html">Sector rotation</a><a href="zones.html">Zones</a><a href="levels.html" aria-current="page">Levels</a></nav>
+  <nav aria-label="Dashboards"><a href="index.html">Sector rotation</a><a href="zones.html">Zones</a><a href="levels.html" aria-current="page">Levels</a><a href="backtest.html">Backtest</a></nav>
 </header>
 <div class="top">
   <p class="stamp" id="gen"></p>
@@ -170,7 +171,7 @@ function setTF(t){
   S.forEach(s=>{ s.ch = CH && CH[s.sym] ? CH[s.sym][t] : null; s.top = s.sig.length ? Math.min(...s.sig.map(x=>[...BULL,...BEAR].indexOf(x))) : 99;
                  s.bvx = (s.brk&&s.brk.vx) ?? (s.tlr&&s.tlr.vx) ?? null; });
   document.querySelectorAll("[data-tf]").forEach(b=>b.setAttribute("aria-pressed", b.dataset.tf===t));
-  document.getElementById("gen").textContent = `Updated ${D.generated}. ${t==="d" ? "Daily candles." : "Weekly candles, completed weeks only."}`;
+  document.getElementById("gen").textContent = `Updated ${D.generated}. ${t==="d" ? "Daily candles." : D.partial ? `Weekly candles. This week is still forming (prices up to ${new Date(D.asof+"T00:00:00").toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}), so weekly signals can change until Friday's close.` : "Weekly candles."}`;
   drawRules(); drawAll();
 }
 function base(){

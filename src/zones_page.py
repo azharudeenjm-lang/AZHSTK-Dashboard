@@ -119,6 +119,7 @@ dt{font-weight:600} dd{margin:0;color:var(--muted);max-width:70ch}
 .legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:.76rem;color:var(--muted);margin-top:8px}
 .legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px;background:var(--c)}
 .lk{white-space:nowrap}
+button.tv{background:transparent;font-family:inherit;line-height:inherit;cursor:pointer}
 .tv{font-size:.72rem;font-weight:600;color:var(--focus,var(--impr));text-decoration:none;border:1px solid currentColor;border-radius:6px;padding:0 5px;margin-left:6px;vertical-align:1px}
 .tv:hover{background:color-mix(in srgb,currentColor 12%,transparent)}
 .note{color:var(--muted);font-size:.78rem;margin-top:24px;max-width:72ch}
@@ -129,7 +130,7 @@ dt{font-weight:600} dd{margin:0;color:var(--muted);max-width:70ch}
 <header>
   <h1>NSE technical zones</h1>
   <div id="gsearch"></div>
-  <nav aria-label="Dashboards"><a href="index.html">Sector rotation</a><a href="zones.html" aria-current="page">Zones</a><a href="levels.html">Levels</a></nav>
+  <nav aria-label="Dashboards"><a href="index.html">Sector rotation</a><a href="zones.html" aria-current="page">Zones</a><a href="levels.html">Levels</a><a href="backtest.html">Backtest</a></nav>
 </header>
 <div style="display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;margin:0 0 14px">
   <p class="stamp" id="gen" style="margin:0"></p>
@@ -201,7 +202,9 @@ function setTF(t){
   sessIdx = {}; dates.forEach((d,i)=>sessIdx[d]=dates.length-1-i);
   document.querySelectorAll("[data-tf]").forEach(b=>b.setAttribute("aria-pressed", b.dataset.tf===t));
   const last = dates[dates.length-1];
-  document.getElementById("gen").textContent = `Updated ${D.generated}. ` + (t==="d" ? `Last session ${dlabel(last)}.` : `Last completed week ended ${dlabel(last)}.`);
+  document.getElementById("gen").textContent = `Updated ${D.generated}. ` + (t==="d" ? `Last session ${dlabel(last)}.` : D.tf.w.partial
+      ? `Week ending ${dlabel(last)} is in progress, using prices up to ${dlabel(D.tf.w.asof)}. This week's zones can still change until Friday's close.`
+      : `Last completed week ended ${dlabel(last)}.`);
   const popts = t==="d" ? [5,10,20,30,60,120] : [4,8,13,26,52,104];
   period = t==="d" ? 30 : 26;
   document.getElementById("period").innerHTML = popts.filter(n=>n<=dates.length).map(n=>`<option value="${n}" ${n===period?"selected":""}>Last ${n} ${P.units}</option>`).join("");
@@ -217,7 +220,7 @@ function setSub(){
 const entered = s => s.since && sessIdx[s.since]!=null && sessIdx[s.since] < period && ORDER.includes(s.zone);
 function drawRules(){
   const T = D.th, p = P, ma = tf==="d" ? `${p.ma}-day` : `${p.ma}-week`;
-  document.getElementById("rules").innerHTML = `<p class="sub" style="margin-top:10px">${p.label} rules, checked in this order on each closing bar: oversold, danger zone, overbought, bullish, bearish, accumulation. The first match wins. Bullish, bearish and accumulation must hold for ${unitsN(p.confirm)} before a move counts. Oversold, overbought and danger zone start and end on the bar their condition is met or lost.${tf==="w"?" Weekly bars use completed weeks only, so a week counts once its Friday close is in.":""}</p>
+  document.getElementById("rules").innerHTML = `<p class="sub" style="margin-top:10px">${p.label} rules, checked in this order on each closing bar: oversold, danger zone, overbought, bullish, bearish, accumulation. The first match wins. Bullish, bearish and accumulation must hold for ${unitsN(p.confirm)} before a move counts. Oversold, overbought and danger zone start and end on the bar their condition is met or lost.${tf==="w"?" The current week is included while it is still forming: its bar uses the latest daily close, so a stock can enter or leave a weekly zone mid-week. The week is final after Friday's close.":""}</p>
   <dl>
     <dt>Oversold</dt><dd>RSI(14) at or below ${T.os}.</dd>
     <dt>Danger zone</dt><dd>A stretched uptrend that is risky to chase. Price has been above the Ichimoku cloud on at least ${p.trend_bars} of the last ${p.trend_window} ${p.units}, RSI is still ${p.rsi_floor} or higher, and either RSI was at or above ${T.ob} on at least ${p.ob_bars} of the last ${p.ob_window} ${p.units} or price is ${p.stretch}% or more above its ${ma} average. It leaves this zone once RSI cools below ${p.rsi_floor} or the stretch unwinds.</dd>
@@ -260,7 +263,7 @@ function drawNew(){
   box.innerHTML = keys.map(d=>{
     const items = by[d];
     const ago = sessIdx[d]; const tag = ago===0 ? (tf==="d"?"today":"latest week") : `${unitsN(ago)} ago`;
-    const head = tf==="d" ? dlabel(d) : `Week ending ${dlabel(d)}`;
+    const head = tf==="d" ? dlabel(d) : `Week ending ${dlabel(d)}${D.tf.w.partial && d===dates[dates.length-1] ? " (in progress)" : ""}`;
     let inner = "";
     ORDER.forEach(z=>{
       const zi = items.filter(s=>s.zone===z); if (!zi.length) return;

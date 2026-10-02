@@ -19,7 +19,7 @@ def _shard(sym):
     return k or "0"
 
 
-def write(stocks, sectors, zones, hists, lvls, fund, dates, generated):
+def write(stocks, sectors, zones, hists, lvls, fund, dates, generated, live=None):
     """zones/hists/lvls: {"d": {ticker: ...}, "w": {...}}; fund: {sym: {...}}."""
     secq = {s["sector"]: {"d": s.get("q_d"), "w": s.get("q_w")} for s in sectors}
     index, shards = [], defaultdict(dict)
@@ -52,7 +52,7 @@ def write(stocks, sectors, zones, hists, lvls, fund, dates, generated):
     DOCS.mkdir(parents=True, exist_ok=True)
     (DOCS / "p").mkdir(exist_ok=True)
     dump = lambda o: json.dumps(o, separators=(",", ":"), allow_nan=False)
-    (DOCS / "search.json").write_text(dump({"gen": generated, "dates": dates, "s": index}), encoding="utf-8")
+    (DOCS / "search.json").write_text(dump({"gen": generated, "dates": dates, "s": index, **(live or {})}), encoding="utf-8")
     for k, v in shards.items():
         (DOCS / "p" / f"{k}.json").write_text(dump(v), encoding="utf-8")
     (DOCS / "profile.js").write_text(PROFILE_JS, encoding="utf-8")

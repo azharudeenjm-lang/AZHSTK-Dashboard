@@ -94,6 +94,7 @@ label.tog{font-size:.85rem;color:var(--muted);display:flex;gap:6px;align-items:c
 .kpis{display:flex;flex-wrap:wrap;gap:6px 20px;font-size:.86rem;color:var(--muted);margin-bottom:12px}
 .kpis b{color:var(--ink);font-weight:600}
 .lk{white-space:nowrap}
+button.tv{background:transparent;font-family:inherit;line-height:inherit;cursor:pointer}
 .tv{font-size:.72rem;font-weight:600;color:var(--focus,var(--impr));text-decoration:none;border:1px solid currentColor;border-radius:6px;padding:0 5px;margin-left:6px;vertical-align:1px}
 .tv:hover{background:color-mix(in srgb,currentColor 12%,transparent)}
 .note{color:var(--muted);font-size:.78rem;margin-top:24px;max-width:72ch}
@@ -104,7 +105,7 @@ label.tog{font-size:.85rem;color:var(--muted);display:flex;gap:6px;align-items:c
 <header>
   <h1>NSE sector rotation</h1>
   <div id="gsearch"></div>
-  <nav aria-label="Dashboards" style="display:flex;gap:14px;font-size:.9rem"><a href="index.html" aria-current="page" style="color:var(--ink);font-weight:600;text-decoration:none">Sector rotation</a><a href="zones.html" style="color:var(--muted);text-decoration:none">Zones</a><a href="levels.html" style="color:var(--muted);text-decoration:none">Levels</a></nav>
+  <nav aria-label="Dashboards" style="display:flex;gap:14px;font-size:.9rem"><a href="index.html" aria-current="page" style="color:var(--ink);font-weight:600;text-decoration:none">Sector rotation</a><a href="zones.html" style="color:var(--muted);text-decoration:none">Zones</a><a href="levels.html" style="color:var(--muted);text-decoration:none">Levels</a><a href="backtest.html" style="color:var(--muted);text-decoration:none">Backtest</a></nav>
   <div class="stamp" style="flex-basis:100%"><span class="bench" id="bench"></span> <span id="gen"></span></div>
 </header>
 
