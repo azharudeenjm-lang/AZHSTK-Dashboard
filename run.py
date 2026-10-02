@@ -11,7 +11,7 @@ import time
 
 import pandas as pd
 
-from src import analytics, dashboard, zones, zones_page
+from src import analytics, dashboard, levels, levels_page, zones, zones_page
 from src.config import BENCHMARK, NEWS_TOP_MOVERS
 
 
@@ -97,6 +97,24 @@ def main():
             zrows.append({"sym": s["sym"], "name": s["name"], "sector": s["sector"],
                           "liquid": s["liquid"], "price": s.get("price"), "r1d": s.get("r1d"), "r1w": s.get("r1w"),
                           "r1m": s.get("r1m"), "d": zd[t], "w": zw.get(t)})
+    print("   levels (daily + weekly)")
+    ld = levels.build_levels(px["Close"], px["High"], px["Low"], px["Volume"], tick, "d")
+    lw = levels.build_levels(px["Close"], px["High"], px["Low"], px["Volume"], tick, "w")
+    volx = {s["sym"]: s.get("vol_x") for s in stocks}
+    lrows = []
+    for r in zrows:
+        t = r["sym"] + ".NS"
+        if t in ld or t in lw:
+            lrows.append({**{k: r[k] for k in ("sym", "name", "sector", "liquid", "price", "r1d", "r1w", "r1m")},
+                          "zd": r["d"]["zone"], "zw": (r.get("w") or {}).get("zone"),
+                          "vx": volx.get(r["sym"]),
+                          "d": ld.get(t), "w": lw.get(t)})
+    charts = {}
+    for r in lrows:
+        for tf in ("d", "w"):
+            if r.get(tf) and "ch" in r[tf]:
+                charts.setdefault(r["sym"], {})[tf] = r[tf].pop("ch")
+    levels_page.render(clean({"stocks": lrows}), clean(charts))
     zones_page.render(clean({"stocks": zrows,
                              "tf": {"d": {"dates": dates_d, "lb_start": lb_d},
                                     "w": {"dates": dates_w, "lb_start": lb_w}}}))
