@@ -107,6 +107,7 @@ dt{font-weight:600} dd{margin:0;color:var(--muted);max-width:70ch}
 <div class="wrap">
 <header>
   <h1>Support, resistance and trendlines</h1>
+  <div id="gsearch"></div>
   <nav aria-label="Dashboards"><a href="index.html">Sector rotation</a><a href="zones.html">Zones</a><a href="levels.html" aria-current="page">Levels</a></nav>
 </header>
 <div class="top">
@@ -242,7 +243,7 @@ function drawTable(){
     return r || ((b.bvx??0)-(a.bvx??0)); });
   const LIMIT = 150, shown = showAll ? list : list.slice(0, LIMIT), COLS = cols(), iv = tf==="w"?"W":"D";
   const cell = (s,k) => { switch(k){
-    case "sym": return `<td class="name"><b>${esc(s.sym)}</b>${links(s.sym, iv)}<small>${esc(s.sector)}</small></td>`;
+    case "sym": return `<td class="name"><button class="psym" data-p="${esc(s.sym)}">${esc(s.sym)}</button>${links(s.sym, iv)}<small>${esc(s.sector)}</small></td>`;
     case "price": return `<td>${fmt(s.price,2)}</td>`;
     case "sig": return `<td class="l">${s.sig.map(schip).join("")}${s.brk&&s.brk.ago>0?`<small class="mut"> ${s.brk.ago} ${s.brk.ago===1?P.unit:P.units} ago</small>`:""}</td>`;
     case "zone": return `<td class="l">${zchip(s.zone)}</td>`;
@@ -294,6 +295,7 @@ setTF("d");
 fetch("levels_charts.json").then(r=>r.ok?r.json():null).then(j=>{ CH = j||{}; S.forEach(s=>{ s.ch = CH[s.sym] ? CH[s.sym][tf] : null; }); drawTable(); })
   .catch(()=>{ CH = {}; drawTable(); });
 </script>
+<script src="profile.js" defer></script>
 </body>
 </html>
 """
