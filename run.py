@@ -12,7 +12,8 @@ import time
 
 import pandas as pd
 
-from src import analytics, backtest, backtest_page, dashboard, levels, levels_page, profiles, zones, zones_page
+from src import (analytics, backtest, backtest_page, dashboard, levels, levels_page, profiles,
+                 setups, setups_page, zones, zones_page)
 from src.config import BENCHMARK, NEWS_TOP_MOVERS
 
 
@@ -120,11 +121,20 @@ def main():
             if r.get(tf) and "ch" in r[tf]:
                 charts.setdefault(r["sym"], {})[tf] = r[tf].pop("ch")
     levels_page.render(clean({"stocks": lrows, "partial": partial, "asof": asof}), clean(charts))
+    print("   trade setups (monthly + weekly + daily)")
+    su, mon = setups.build(px, universe, zd, zw, ld, lw, sectors)
+    srows = []
+    for s in stocks:
+        t = s["sym"] + ".NS"
+        if t in su:
+            srows.append({"sym": s["sym"], "name": s["name"], "sector": s["sector"], "liquid": s["liquid"],
+                          "price": s.get("price"), **su[t]})
+    setups_page.render(clean({"stocks": srows}))
     print("   stock profiles")
     gen = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%d %b %Y, %I:%M %p IST")
     profiles.write(clean(stocks), clean(sectors), clean({"d": zd, "w": zw}), clean({"d": hd, "w": hw}),
                    clean({"d": ld, "w": lw}), fmap, {"d": dates_d, "w": dates_w}, gen,
-                   {"partial": partial, "asof": asof})
+                   {"partial": partial, "asof": asof}, clean(su), clean(mon))
     zones_page.render(clean({"stocks": zrows,
                              "tf": {"d": {"dates": dates_d, "lb_start": lb_d},
                                     "w": {"dates": dates_w, "lb_start": lb_w,
