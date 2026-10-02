@@ -63,3 +63,22 @@ ZONE_PARAMS = {
         "rsi_floor": 60,
     },
 }
+
+# ---------- Support / resistance / trendlines (levels.html) ----------
+LEVEL_PARAMS = {
+    "d": {"label": "Daily", "unit": "session", "units": "sessions",
+          "lookback": 250,   # bars searched for swing points
+          "pivot": 5,        # a swing high/low beats this many bars each side
+          "tol_min": 0.015,  # levels within 1.5% (or half an ATR) are one level
+          "recent": 5,       # a breakout counts if it happened in the last 5 bars
+          "retest": 20,      # breakouts 6-20 bars ago can be retested
+          "brk": 0.01,       # close at least 1% through the level/line
+          "near": 0.03,      # "near" support/resistance = within 3%
+          "near_tl": 0.025,  # "at trendline support" = within 2.5% above the line
+          "vol_x": 1.5,      # breakout volume vs 20-bar average
+          "chart": 120},     # bars shown in the mini chart
+    "w": {"label": "Weekly", "unit": "week", "units": "weeks",
+          "lookback": 156, "pivot": 3, "tol_min": 0.025, "recent": 2,
+          "retest": 8, "brk": 0.015, "near": 0.05, "near_tl": 0.04,
+          "vol_x": 1.5, "chart": 104},
+}
