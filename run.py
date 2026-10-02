@@ -11,7 +11,7 @@ import time
 
 import pandas as pd
 
-from src import analytics, dashboard, levels, levels_page, zones, zones_page
+from src import analytics, dashboard, levels, levels_page, profiles, zones, zones_page
 from src.config import BENCHMARK, NEWS_TOP_MOVERS
 
 
@@ -88,8 +88,8 @@ def main():
 
     print("   zones (daily + weekly)")
     tick = universe["ticker"].tolist()
-    zd, dates_d, lb_d = zones.build_zones(px["Close"], px["High"], px["Low"], tick, "d")
-    zw, dates_w, lb_w = zones.build_zones(px["Close"], px["High"], px["Low"], tick, "w")
+    zd, dates_d, lb_d, hd = zones.build_zones(px["Close"], px["High"], px["Low"], tick, "d", history=True)
+    zw, dates_w, lb_w, hw = zones.build_zones(px["Close"], px["High"], px["Low"], tick, "w", history=True)
     zrows = []
     for s in stocks:
         t = s["sym"] + ".NS"
@@ -115,6 +115,11 @@ def main():
             if r.get(tf) and "ch" in r[tf]:
                 charts.setdefault(r["sym"], {})[tf] = r[tf].pop("ch")
     levels_page.render(clean({"stocks": lrows}), clean(charts))
+    print("   stock profiles")
+    from datetime import datetime, timedelta, timezone
+    gen = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%d %b %Y, %I:%M %p IST")
+    profiles.write(clean(stocks), clean(sectors), clean({"d": zd, "w": zw}), clean({"d": hd, "w": hw}),
+                   clean({"d": ld, "w": lw}), fmap, {"d": dates_d, "w": dates_w}, gen)
     zones_page.render(clean({"stocks": zrows,
                              "tf": {"d": {"dates": dates_d, "lb_start": lb_d},
                                     "w": {"dates": dates_w, "lb_start": lb_w}}}))
