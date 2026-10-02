@@ -1,0 +1,4 @@
+# Your own sector corrections. These always win.
+# Use one of NSE's industry names so it groups with the rest, e.g. Chemicals
+symbol,sector
+KRONOX,Chemicals
