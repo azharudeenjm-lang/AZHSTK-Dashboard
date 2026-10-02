@@ -42,7 +42,8 @@ def rrg(series, bench, window=RRG_WINDOW):
     ratio = 100 + (rs - rs.rolling(window).mean()) / rs.rolling(window).std(ddof=0)
     roc = ratio.pct_change() * 100
     mom = 100 + (roc - roc.rolling(window).mean()) / roc.rolling(window).std(ddof=0)
-    out = pd.DataFrame({"x": ratio, "y": mom}).dropna()
+    # light smoothing so tails show direction rather than daily noise
+    out = pd.DataFrame({"x": ratio, "y": mom}).dropna().ewm(span=5, adjust=False).mean()
     return out if len(out) else None
 
 
