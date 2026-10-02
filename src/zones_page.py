@@ -96,6 +96,16 @@ th[aria-sort]::after{content:" ↓";font-size:.75em} th[aria-sort="ascending"]::
 .up{color:var(--up)}.down{color:var(--down)}.mut{color:var(--muted)}
 .strip{display:block}
 tr.hl td{background:color-mix(in srgb,var(--focus) 12%,var(--panel))}
+tr.gz td{background:color-mix(in srgb,var(--c) 10%,var(--panel));border-bottom:1px solid var(--line);padding:10px 8px}
+tr.gs td{padding:0;background:var(--panel)}
+tr.gz td,tr.gs td{text-align:left}
+.gl{position:sticky;left:8px;display:inline-flex;gap:8px;align-items:center}
+.gs button{font:inherit;font-size:.85rem;color:var(--ink);background:transparent;border:0;padding:8px 8px 8px 22px;cursor:pointer;display:inline-flex;gap:8px;align-items:center;position:sticky;left:0}
+.gs button::before{content:"▸";color:var(--muted);transition:transform .15s}
+.gs button[aria-expanded="true"]::before{transform:rotate(90deg)}
+.gs button b{font-weight:600}
+.gs button .cnt{color:var(--muted)}
+@media (prefers-reduced-motion:reduce){.gs button::before{transition:none}}
 .more{margin-top:10px;font:500 .85rem var(--font);background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:6px 12px;cursor:pointer}
 details{font-size:.88rem}
 details summary{cursor:pointer;font-weight:600}
@@ -103,6 +113,7 @@ dl{display:grid;grid-template-columns:max-content 1fr;gap:6px 14px;margin:12px 0
 dt{font-weight:600} dd{margin:0;color:var(--muted);max-width:70ch}
 .legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:.76rem;color:var(--muted);margin-top:8px}
 .legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px;background:var(--c)}
+.lk{white-space:nowrap}
 .tv{font-size:.72rem;font-weight:600;color:var(--focus,var(--impr));text-decoration:none;border:1px solid currentColor;border-radius:6px;padding:0 5px;margin-left:6px;vertical-align:1px}
 .tv:hover{background:color-mix(in srgb,currentColor 12%,transparent)}
 .note{color:var(--muted);font-size:.78rem;margin-top:24px;max-width:72ch}
@@ -116,8 +127,11 @@ dt{font-weight:600} dd{margin:0;color:var(--muted);max-width:70ch}
 </header>
 <div style="display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;margin:0 0 14px">
   <p class="stamp" id="gen" style="margin:0"></p>
-  <div class="seg" role="group" aria-label="Timeframe">
-    <button data-tf="d" aria-pressed="true">Daily</button><button data-tf="w" aria-pressed="false">Weekly</button>
+  <div class="tools" style="margin:0">
+    <div class="seg" role="group" aria-label="Timeframe">
+      <button data-tf="d" aria-pressed="true">Daily</button><button data-tf="w" aria-pressed="false">Weekly</button>
+    </div>
+    <label class="tog">Period <select id="period" aria-label="Period to show"></select></label>
   </div>
 </div>
 
@@ -138,6 +152,7 @@ dt{font-weight:600} dd{margin:0;color:var(--muted);max-width:70ch}
     <select id="f-new" aria-label="Entered"></select>
     <input type="search" id="q" placeholder="Find a stock" aria-label="Find a stock">
     <label class="tog"><input type="checkbox" id="liq" checked> Liquid only</label>
+    <label class="tog"><input type="checkbox" id="grp" checked> Group by where they came from</label>
   </div>
   <div class="tbl"><table id="t"></table></div>
   <button class="more" id="more" hidden></button>
@@ -166,10 +181,12 @@ const fmt = (v,d=1) => v==null ? "–" : Number(v).toLocaleString("en-IN",{minim
 const sgn = (v,d=1) => v==null ? `<td class="mut">–</td>` : `<td class="${v>0?'up':v<0?'down':''}">${v>0?'+':''}${fmt(v,d)}</td>`;
 const dlabel = s => s ? new Date(s+"T00:00:00").toLocaleDateString("en-IN",{day:"2-digit",month:"short"}) : "";
 const tv = (sym, iv) => "https://www.tradingview.com/chart/?symbol=" + encodeURIComponent("NSE:" + sym.replace(/[&-]/g,"_")) + (iv ? "&interval=" + iv : "");
-const tvLink = (sym, iv) => `<a class="tv" href="${tv(sym, iv)}" target="_blank" rel="noopener" aria-label="Open ${esc(sym)} chart on TradingView" onclick="event.stopPropagation()">Chart</a>`;
+const scr = sym => "https://www.screener.in/company/" + encodeURIComponent(sym) + "/";
+const tvLink = (sym, iv) => `<span class="lk"><a class="tv" href="${tv(sym, iv)}" target="_blank" rel="noopener" aria-label="Open ${esc(sym)} chart on TradingView" onclick="event.stopPropagation()">Chart</a><a class="tv" href="${scr(sym)}" target="_blank" rel="noopener" aria-label="Open ${esc(sym)} on Screener" onclick="event.stopPropagation()">Screener</a></span>`;
 const chip = z => `<span class="chip" style="--c:${zc(z)}">${esc(z)}</span>`;
 
 let zoneF = null, sort = {k:"days",dir:1}, showAll = false, hl = null; const openDays = new Set();
+let period = 30, grpOpen = new Map();
 let tf = "d", S = [], dates = [], sessIdx = {}, P = D.params.d;
 function setTF(t){
   tf = t; P = D.params[t]; dates = D.tf[t].dates;
@@ -178,12 +195,19 @@ function setTF(t){
   document.querySelectorAll("[data-tf]").forEach(b=>b.setAttribute("aria-pressed", b.dataset.tf===t));
   const last = dates[dates.length-1];
   document.getElementById("gen").textContent = `Updated ${D.generated}. ` + (t==="d" ? `Last session ${dlabel(last)}.` : `Last completed week ended ${dlabel(last)}.`);
-  document.getElementById("all-sub").textContent = `Tap a column to sort. The strip shows the zone for each of the last 30 ${P.units}, oldest on the left.`;
+  const popts = t==="d" ? [5,10,20,30,60,120] : [4,8,13,26,52,104];
+  period = t==="d" ? 30 : 26;
+  document.getElementById("period").innerHTML = popts.filter(n=>n<=dates.length).map(n=>`<option value="${n}" ${n===period?"selected":""}>Last ${n} ${P.units}</option>`).join("");
+  grpOpen.clear();
   const opts = t==="d" ? [1,3,5,10,20] : [1,2,4,8,13];
   document.getElementById("f-new").innerHTML = `<option value="0">Entered any time</option>` + opts.map(n=>`<option value="${n}">${n===1?(t==="d"?"Entered today":"Entered this week"):`In last ${n} ${P.units}`}</option>`).join("");
-  drawRules(); showAll=false; drawAll();
+  drawRules(); showAll=false; setSub(); drawAll();
 }
 const unitsN = n => `${n} ${n===1?P.unit:P.units}`;
+function setSub(){
+  document.getElementById("all-sub").textContent = `Tap a column to sort. The strip shows the zone for each of the last ${unitsN(period)}, oldest on the left.`;
+}
+const entered = s => s.since && sessIdx[s.since]!=null && sessIdx[s.since] < period && ORDER.includes(s.zone);
 function drawRules(){
   const T = D.th, p = P, ma = tf==="d" ? `${p.ma}-day` : `${p.ma}-week`;
   document.getElementById("rules").innerHTML = `<p class="sub" style="margin-top:10px">${p.label} rules, checked in this order on each closing bar: oversold, danger zone, overbought, bullish, bearish, accumulation. The first match wins. Bullish, bearish and accumulation must hold for ${unitsN(p.confirm)} before a move counts. Oversold, overbought and danger zone start and end on the bar their condition is met or lost.${tf==="w"?" Weekly bars use completed weeks only, so a week counts once its Friday close is in.":""}</p>
@@ -208,19 +232,19 @@ function drawCycle(){
   const el = document.getElementById("cycle");
   el.classList.toggle("filtering", !!zoneF);
   el.innerHTML = ORDER.map((z,i)=>{
-    const all = b.filter(s=>s.zone===z), nw = all.filter(s=>s.new).length;
+    const all = b.filter(s=>s.zone===z), nw = all.filter(entered).length;
     return `<button class="z" style="--c:${zc(z)}" data-z="${z}" aria-pressed="${zoneF===z}">
       <span class="k">${i+1}</span><span class="n">${all.length}</span>
-      <span><span class="t">${z}</span><br><span class="s">${nw ? `${nw} new` : "no new entries"}</span></span></button>`;}).join("");
+      <span><span class="t">${z}</span><br><span class="s">${nw ? `${nw} entered in ${unitsN(period)}` : `none entered in ${unitsN(period)}`}</span></span></button>`;}).join("");
   el.querySelectorAll(".z").forEach(bn=>bn.addEventListener("click",()=>{
     zoneF = zoneF===bn.dataset.z ? null : bn.dataset.z;
     document.getElementById("f-zone").value = zoneF||""; showAll=false; drawAll(); }));
 }
 
 function drawNew(){
-  const nd = P.new_bars;
-  document.getElementById("new-sub").textContent = `Stocks that moved into a zone in the last ${unitsN(nd)}, newest first. Tap one to find it in the table.`;
-  const list = base().filter(s=>s.new && (!zoneF || s.zone===zoneF));
+  const nd = period;
+  document.getElementById("new-sub").textContent = `Stocks that moved into their current zone in the last ${unitsN(nd)} and are still in it, newest first. Tap one to find it in the table.`;
+  const list = base().filter(s=>entered(s) && (!zoneF || s.zone===zoneF));
   const by = {}; list.forEach(s=>(by[s.since] ??= []).push(s));
   const keys = Object.keys(by).sort().reverse();
   const box = document.getElementById("days");
@@ -240,13 +264,14 @@ function drawNew(){
     document.getElementById("all").scrollIntoView({behavior:"smooth"}); }));
 }
 
-function strip(code){
-  const w = 4, gap = 1, n = code.length;
+function strip(full){
+  const code = (full||"").slice(-period), n = code.length;
+  const gap = n > 60 ? 0 : 1, w = Math.max(1.4, Math.min(5, 150/n - gap));
   return `<svg class="strip" width="${n*(w+gap)}" height="14" viewBox="0 0 ${n*(w+gap)} 14" role="img" aria-label="Zone history">${
     [...code].map((c,i)=>`<rect x="${i*(w+gap)}" y="1" width="${w}" height="12" rx="1" fill="${zc(CODE[c])}"><title>${dlabel(dates[dates.length-n+i])}: ${CODE[c]}</title></rect>`).join("")}</svg>`;
 }
 
-const cols = () => [["sym","Stock"],["price","Price"],["zone","Zone","l"],["since",tf==="d"?"Since":"Since week of","l"],["days",P.units[0].toUpperCase()+P.units.slice(1)],["prev","Came from","l"],["strip",`Last 30 ${P.units}`,"l"],
+const cols = () => [["sym","Stock"],["price","Price"],["zone","Zone","l"],["since",tf==="d"?"Since":"Since week of","l"],["days",P.units[0].toUpperCase()+P.units.slice(1)],["prev","Came from","l"],["strip",`Last ${unitsN(period)}`,"l"],
   ["rsi","RSI"],["macd_x","MACD","l"],["adx","ADX"],["di","+DI / −DI"],["chop","Chop"],["cloud","Cloud","l"],["stretch",tf==="d"?`vs ${P.ma}-DMA %`:`vs ${P.ma}-WMA %`],
   tf==="d"?["r1d","1D %"]:["r1w","1W %"],["r1m","1M %"]];
 function drawTable(){
@@ -260,7 +285,8 @@ function drawTable(){
     if (k==="days" && sort.dir===1){ x = a.capped?1e9:x; y = b.capped?1e9:y; }
     if (x==null) return 1; if (y==null) return -1;
     return (typeof x==="string" ? x.localeCompare(y) : x-y) * sort.dir; });
-  const LIMIT = 150, shown = showAll ? list : list.slice(0,LIMIT);
+  const grouped = document.getElementById("grp").checked;
+  const LIMIT = 150, shown = (showAll || grouped) ? list : list.slice(0,LIMIT);
   const t = document.getElementById("t"), COLS = cols();
   const cell = (s,k) => {
     switch(k){
@@ -281,11 +307,30 @@ function drawTable(){
       case "r1d": return sgn(s.r1d,2); case "r1w": return sgn(s.r1w,1); case "r1m": return sgn(s.r1m,1);
     }};
   t.innerHTML = `<thead><tr>${COLS.map(([k,l,c])=>`<th class="${c||''}" data-k="${k}" ${sort.k===k?`aria-sort="${sort.dir>0?'ascending':'descending'}"`:''}>${l}</th>`).join("")}</tr></thead><tbody>${
-    shown.length ? shown.map(s=>`<tr class="${s.sym===hl?'hl':''}">${COLS.map(([k])=>cell(s,k)).join("")}</tr>`).join("")
-    : `<tr><td class="empty" colspan="${COLS.length}">No stocks match these filters. Try “Entered any time” or untick “Liquid only”.</td></tr>`}</tbody>`;
+    !shown.length ? `<tr><td class="empty" colspan="${COLS.length}">No stocks match these filters. Try “Entered any time” or untick “Liquid only”.</td></tr>`
+    : grouped ? groupRows(shown, COLS, cell, !!q)
+    : shown.map(s=>`<tr class="${s.sym===hl?'hl':''}">${COLS.map(([k])=>cell(s,k)).join("")}</tr>`).join("") + (false ? `<tr><td class="empty" colspan="${COLS.length}">` : "")}</tbody>`;
+  t.querySelectorAll("tr.gs button").forEach(b=>b.addEventListener("click",()=>{
+    grpOpen.set(b.dataset.g, b.getAttribute("aria-expanded")!=="true"); drawTable(); }));
   t.querySelectorAll("th").forEach(th=>th.addEventListener("click",()=>{ const k=th.dataset.k; if(k==="strip") return;
     sort.dir = sort.k===k ? -sort.dir : (["sym","zone","prev","cloud","macd_x","days"].includes(k)?1:-1); sort.k=k; drawTable(); }));
-  const m = document.getElementById("more"); m.hidden = showAll || list.length<=LIMIT; m.textContent = `Show all ${list.length}`;
+  const m = document.getElementById("more"); m.hidden = grouped || showAll || list.length<=LIMIT; m.textContent = `Show all ${list.length}`;
+}
+function groupRows(list, COLS, cell, forceOpen){
+  const zs = zoneF ? [zoneF] : ORDER, lb = dlabel(D.tf[tf].lb_start);
+  let html = "";
+  zs.forEach(z=>{
+    const rows = list.filter(s=>s.zone===z); if (!rows.length) return;
+    html += `<tr class="gz" style="--c:${zc(z)}"><td colspan="${COLS.length}"><span class="gl">${chip(z)} <b>${rows.length}</b> <span class="mut">${rows.length===1?"stock":"stocks"}</span></span></td></tr>`;
+    const by = new Map();
+    rows.forEach(s=>{ const g = s.capped ? `In this zone since before ${lb}` : `From ${s.prev||"no data"}`; if(!by.has(g)) by.set(g,[]); by.get(g).push(s); });
+    [...by.entries()].sort((a,b)=>b[1].length-a[1].length).forEach(([g,items])=>{
+      const key = z+"|"+g, open = forceOpen || (grpOpen.has(key) ? grpOpen.get(key) : !!zoneF);
+      html += `<tr class="gs"><td colspan="${COLS.length}"><button data-g="${esc(key)}" aria-expanded="${open}"><b>${esc(g)}</b><span class="cnt">${items.length}</span></button></td></tr>`;
+      if (open) html += items.map(s=>`<tr class="${s.sym===hl?'hl':''}">${COLS.map(([k])=>cell(s,k)).join("")}</tr>`).join("");
+    });
+  });
+  return html;
 }
 function drawAll(){ drawCycle(); drawNew(); drawTable(); }
 
@@ -293,10 +338,12 @@ const fz = document.getElementById("f-zone");
 fz.innerHTML = `<option value="">All six zones</option>` + [...ORDER,"Neutral"].map(z=>`<option>${z}</option>`).join("");
 fz.addEventListener("change",()=>{ zoneF = fz.value||null; showAll=false; drawAll(); });
 const fs = document.getElementById("f-sec");
-fs.innerHTML = `<option value="">All sectors</option>` + [...new Set(S.map(s=>s.sector))].sort().map(s=>`<option>${esc(s)}</option>`).join("");
+fs.innerHTML = `<option value="">All sectors</option>` + [...new Set(D.stocks.map(s=>s.sector))].sort().map(s=>`<option>${esc(s)}</option>`).join("");
 fs.addEventListener("change",()=>{ showAll=false; drawAll(); });
 document.getElementById("f-new").addEventListener("change",()=>{ showAll=false; drawTable(); });
 document.getElementById("liq").addEventListener("change",()=>{ showAll=false; drawAll(); });
+document.getElementById("grp").addEventListener("change",()=>{ showAll=false; drawTable(); });
+document.getElementById("period").addEventListener("change",e=>{ period=+e.target.value; openDays.clear(); setSub(); drawAll(); });
 document.getElementById("q").addEventListener("input",()=>{ hl=null; showAll=false; drawTable(); });
 document.getElementById("more").addEventListener("click",()=>{ showAll=true; drawTable(); });
 document.getElementById("legend").innerHTML = [...ORDER,"Neutral"].map(z=>`<span><i style="--c:${zc(z)}"></i>${z}</span>`).join("");
