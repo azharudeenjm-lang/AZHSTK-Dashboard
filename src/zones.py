@@ -131,8 +131,36 @@ def confirm(seq, need_bars):
     return out, start, prev
 
 
-def build_zones(close, high, low, tickers, tf="d"):
-    """Returns ({ticker: zone dict}, last-30 bar dates, lookback start date)."""
+def segments(sm, closes, dates):
+    """Split a confirmed zone sequence into stays: one row per visit to a zone.
+
+    Each row: [zone code, start date, end date, bars, entry close, last close,
+               best % move, worst % move, began before the history window]
+    """
+    out, i, n = [], 0, len(sm)
+    while i < n:
+        j = i
+        while j + 1 < n and sm[j + 1] == sm[i]:
+            j += 1
+        seg = closes[i:j + 1]
+        e = closes[i]
+        if e and not np.isnan(e):
+            best = float(np.nanmax(seg) / e - 1) * 100
+            worst = float(np.nanmin(seg) / e - 1) * 100
+        else:
+            best = worst = None
+        out.append([sm[i], dates[i], dates[j], j - i + 1, _r(e, 2), _r(closes[j], 2),
+                    _r(best, 1), _r(worst, 1), i == 0])
+        i = j + 1
+    return out
+
+
+def build_zones(close, high, low, tickers, tf="d", history=False):
+    """Returns ({ticker: zone dict}, bar dates, lookback start date[, history]).
+
+    With history=True also returns {ticker: {"segs": [...], "c": [closes]}}
+    for the stock profile pages.
+    """
     p = ZONE_PARAMS[tf]
     cols = [t for t in tickers if t in close.columns]
     c, h, l = close[cols], high[cols], low[cols]
@@ -144,8 +172,10 @@ def build_zones(close, high, low, tickers, tf="d"):
     dates = raw.index
     last = {k: v.iloc[-1] for k, v in ind.items()}
     lc, ls = c.iloc[-1], stretch.iloc[-1]
+    ctail = c.reindex(dates)
+    dstr = [d.strftime("%Y-%m-%d") for d in dates]
 
-    res = {}
+    res, hist = {}, {}
     for t in cols:
         sm, start, prev = confirm(raw[t].tolist(), p["confirm"])
         z = sm[-1]
@@ -155,7 +185,11 @@ def build_zones(close, high, low, tickers, tf="d"):
         if pd.notna(top) and pd.notna(px):
             cloud = "Above" if px > top else "Below" if px < bot else "Inside"
         m, s = last["macd"].get(t), last["signal"].get(t)
+        closes = ctail[t].to_numpy(float)
+        entry = closes[start] if start < len(closes) else np.nan
         res[t] = {
+            "entry": _r(entry, 2),
+            "move": _r((px / entry - 1) * 100, 1) if pd.notna(px) and pd.notna(entry) and entry else None,
             "zone": NAME[z],
             "since": dates[start].strftime("%Y-%m-%d") if start > 0 else None,
             "days": bars, "capped": start == 0,
@@ -168,7 +202,12 @@ def build_zones(close, high, low, tickers, tf="d"):
             "mdi": _r(last["mdi"].get(t), 1), "chop": _r(last["chop"].get(t), 1),
             "cloud": cloud, "stretch": _r(ls.get(t), 1),
         }
-    return res, [d.strftime("%Y-%m-%d") for d in dates], dates[0].strftime("%Y-%m-%d")
+        if history:
+            hist[t] = {"segs": segments(sm, closes, dstr),
+                       "c": [None if np.isnan(x) else float(f"{x:.4g}") for x in closes]}
+    if history:
+        return res, dstr, dstr[0], hist
+    return res, dstr, dstr[0]
 
 
 def _r(x, n):
