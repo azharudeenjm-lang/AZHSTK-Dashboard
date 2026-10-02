@@ -103,7 +103,7 @@ label.tog{font-size:.85rem;color:var(--muted);display:flex;gap:6px;align-items:c
 <div class="wrap">
 <header>
   <h1>NSE sector rotation</h1>
-  <nav aria-label="Dashboards" style="display:flex;gap:14px;font-size:.9rem"><a href="index.html" aria-current="page" style="color:var(--ink);font-weight:600;text-decoration:none">Sector rotation</a><a href="zones.html" style="color:var(--muted);text-decoration:none">Zones</a></nav>
+  <nav aria-label="Dashboards" style="display:flex;gap:14px;font-size:.9rem"><a href="index.html" aria-current="page" style="color:var(--ink);font-weight:600;text-decoration:none">Sector rotation</a><a href="zones.html" style="color:var(--muted);text-decoration:none">Zones</a><a href="levels.html" style="color:var(--muted);text-decoration:none">Levels</a></nav>
   <div class="stamp" style="flex-basis:100%"><span class="bench" id="bench"></span> <span id="gen"></span></div>
 </header>
 
