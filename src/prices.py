@@ -75,6 +75,15 @@ def fetch_prices(tickers, benchmark):
         df = df.loc[:, ~df.columns.duplicated()]
         df.index = pd.to_datetime(df.index).tz_localize(None)
         out[f] = df
+    # Drop "ghost" days: Yahoo sometimes adds a row for a market holiday
+    # (e.g. 2 Oct) for only a few tickers. That row leaves every other stock
+    # with a blank last price, which empties the whole dashboard.
+    cnt = out["Close"].notna().sum(axis=1)
+    real = cnt >= 0.5 * cnt.max()
+    if (~real).any():
+        print("  dropped sparse days:", ", ".join(d.strftime("%d %b %Y") for d in cnt.index[~real]))
+        for f in FIELDS:
+            out[f] = out[f][real]
     cols = out["Close"].columns
     CACHE.mkdir(parents=True, exist_ok=True)
     for f in FIELDS:
