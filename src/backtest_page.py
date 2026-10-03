@@ -98,7 +98,7 @@ button:focus-visible,select:focus-visible,input:focus-visible,tr:focus-visible{o
 <header>
   <h1>Zone strategy backtest</h1>
   <div id="gsearch"></div>
-  <nav aria-label="Dashboards"><a href="index.html">Sector rotation</a><a href="zones.html">Zones</a><a href="levels.html">Levels</a><a href="setups.html">Setups</a><a href="backtest.html" aria-current="page">Backtest</a></nav>
+  <nav aria-label="Dashboards"><a href="index.html">Sector rotation</a><a href="zones.html">Zones</a><a href="levels.html">Levels</a><a href="setups.html">Setups</a><a href="watchlist.html">My list</a><a href="backtest.html" aria-current="page">Backtest</a></nav>
 </header>
 <p class="stamp" id="gen"></p>
 

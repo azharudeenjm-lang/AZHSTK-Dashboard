@@ -130,7 +130,7 @@ button.tv{background:transparent;font-family:inherit;line-height:inherit;cursor:
 <header>
   <h1>NSE technical zones</h1>
   <div id="gsearch"></div>
-  <nav aria-label="Dashboards"><a href="index.html">Sector rotation</a><a href="zones.html" aria-current="page">Zones</a><a href="levels.html">Levels</a><a href="setups.html">Setups</a><a href="backtest.html">Backtest</a></nav>
+  <nav aria-label="Dashboards"><a href="index.html">Sector rotation</a><a href="zones.html" aria-current="page">Zones</a><a href="levels.html">Levels</a><a href="setups.html">Setups</a><a href="watchlist.html">My list</a><a href="backtest.html">Backtest</a></nav>
 </header>
 <div style="display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;margin:0 0 14px">
   <p class="stamp" id="gen" style="margin:0"></p>

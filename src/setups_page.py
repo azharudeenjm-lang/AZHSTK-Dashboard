@@ -82,7 +82,7 @@ button.psym{all:unset;font-weight:700;cursor:pointer;border-bottom:1px dotted cu
 <header>
   <h1>Trade setups</h1>
   <div id="gsearch"></div>
-  <nav aria-label="Dashboards"><a href="index.html">Sector rotation</a><a href="zones.html">Zones</a><a href="levels.html">Levels</a><a href="setups.html" aria-current="page">Setups</a><a href="backtest.html">Backtest</a></nav>
+  <nav aria-label="Dashboards"><a href="index.html">Sector rotation</a><a href="zones.html">Zones</a><a href="levels.html">Levels</a><a href="setups.html" aria-current="page">Setups</a><a href="watchlist.html">My list</a><a href="backtest.html">Backtest</a></nav>
 </header>
 <p class="stamp" id="gen"></p>
 
@@ -108,7 +108,9 @@ button.psym{all:unset;font-weight:700;cursor:pointer;border-bottom:1px dotted cu
     <label class="tog">Capital ₹ <input type="number" id="cap" min="0" step="10000" inputmode="numeric" aria-label="Capital in rupees"></label>
     <label class="tog">Risk per trade <input type="number" id="risk" min="0.1" max="5" step="0.1" inputmode="decimal" aria-label="Risk per trade in percent" style="width:70px">%</label>
     <select id="f-wk" aria-label="Weekly setup"><option value="">Any weekly setup</option><option>Fresh trend</option><option>Breakout</option><option>Pullback</option><option>Base</option><option>In trend</option></select>
+    <select id="f-rs" aria-label="Minimum relative strength"><option value="0">Any RS</option><option value="50">RS 50+</option><option value="70">RS 70+</option><option value="80">RS 80+ (top 20%)</option><option value="90">RS 90+</option></select>
     <select id="f-sec" aria-label="Sector"></select>
+    <label class="tog"><input type="checkbox" id="noearn"> Hide results within 2 weeks</label>
     <input type="search" id="q" placeholder="Find a stock" aria-label="Find a stock">
     <label class="tog"><input type="checkbox" id="liq" checked> Liquid only</label>
   </div>
@@ -121,7 +123,9 @@ button.psym{all:unset;font-weight:700;cursor:pointer;border-bottom:1px dotted cu
   <ul class="note">
     <li><b>Ready</b> means all three timeframes agree today, the sector isn't lagging, and there's a sensible stop. It is a shortlist to check on the chart, not a buy order.</li>
     <li><b>Setting up</b> means the weekly setup is there but something is not yet in line, usually the daily is overheated. These often become Ready after a few days' dip.</li>
-    <li><b>Stop</b> is the highest of the recent daily swing low, the weekly Kijun line and daily support that sits between 1.5% and 15% below the price. <b>Room</b> is the distance to the next weekly resistance; <b>R:R</b> compares it with the stop distance. A dash means no resistance overhead.</li>
+    <li><b>RS</b> ranks each stock's 3, 6, 9 and 12-month performance against all liquid stocks: 90 means stronger than 90% of the market. <b>Target</b> is the first Fibonacci target on the weekly chart (prior high, projection or extension); <b>R:R</b> compares it with the stop.</li>
+    <li>In a <b>risk-off</b> market, Ready also needs a Leading or Improving sector and RS 70+. Stocks with results due within 2 weeks move to Setting up.</li>
+    <li><b>Stop</b> is the highest of the recent daily swing low, the weekly Kijun line and daily support that sits between 1.5% and 15% below the price. <b>Resistance</b> is the distance to the next weekly resistance; "clear" means none overhead.</li>
     <li><b>Quantity</b> is sized so that hitting the stop loses your chosen risk % of capital. Your capital and risk settings stay on this device only.</li>
     <li>Weekly and monthly bars include the period in progress, so they can change before the week or month closes. For research only, not investment advice.</li>
   </ul>
@@ -147,8 +151,10 @@ cap.value = store.get("cap","500000"); risk.value = store.get("risk","1");
 
 function base(){
   const liq = document.getElementById("liq").checked, sec = document.getElementById("f-sec").value,
-        wk = document.getElementById("f-wk").value, q = document.getElementById("q").value.trim().toUpperCase();
+        wk = document.getElementById("f-wk").value, q = document.getElementById("q").value.trim().toUpperCase(),
+        mrs = +document.getElementById("f-rs").value, ne = document.getElementById("noearn").checked;
   return D.stocks.filter(s => (!liq || s.liquid) && (!sec || s.sector===sec) && (!wk || s.wk===wk)
+    && (!mrs || (s.rs||0) >= mrs) && (!ne || !s.earn_soon)
     && (!q || s.sym.includes(q) || s.name.toUpperCase().includes(q)));
 }
 function drawBuckets(){
@@ -157,10 +163,10 @@ function drawBuckets(){
   document.querySelectorAll(".b").forEach(el=>el.addEventListener("click",()=>{ bucket = el.dataset.b; showAll=false; drawAll(); }));
 }
 const ck = (st, title, txt) => { const [i,c] = mark(st); return `<td class="l"><div class="ck"><i class="${c}" aria-label="${esc(st)}">${i}</i><div>${esc(title)}<small>${esc(txt)}</small></div></div></td>`; };
-const COLS = [["sym","Stock"],["price","Price"],["score","Score"],["mon","Monthly","l"],["wk","Weekly","l"],["day","Daily","l"],["q","Sector","l"],["stop_pct","Stop"],["room","Room"],["rr","R:R"],["qty","Qty"]];
+const COLS = [["sym","Stock"],["price","Price"],["score","Score"],["rs","RS"],["mon","Monthly","l"],["wk","Weekly","l"],["day","Daily","l"],["q","Sector","l"],["stop_pct","Stop"],["t1u","Target"],["rr","R:R"],["room","Resistance"],["qty","Qty"]];
 function drawTable(){
   const C = +cap.value||0, R = (+risk.value||0)/100;
-  let L = base().filter(s=>s.bucket===bucket).map(s=>({...s, qty: s.stop && s.price>s.stop ? Math.floor(C*R/(s.price-s.stop)) : null}));
+  let L = base().filter(s=>s.bucket===bucket).map(s=>({...s, t1u: s.t1 ? s.t1.up : null, qty: s.stop && s.price>s.stop ? Math.floor(C*R/(s.price-s.stop)) : null}));
   L.sort((a,b)=>{ const x=a[sort.k], y=b[sort.k]; if (x==null) return 1; if (y==null) return -1;
     const r = (typeof x==="string" ? x.localeCompare(y) : x-y) * sort.dir; return r || (b.score-a.score) || ((b.rr??0)-(a.rr??0)); });
   const bk = BK.find(b=>b[0]===bucket);
@@ -174,16 +180,18 @@ function drawTable(){
   t.innerHTML = `<thead><tr>${COLS.map(([k,l,c])=>`<th class="${c||''}" data-k="${k}" ${sort.k===k?`aria-sort="${sort.dir>0?'ascending':'descending'}"`:''}>${l}</th>`).join("")}</tr></thead><tbody>${
     S.map(s=>`<tr>
       <td class="name"><button class="psym" data-p="${esc(s.sym)}">${esc(s.sym)}</button><span class="lk"><a href="${tv(s.sym)}" target="_blank" rel="noopener">Chart</a><a href="${scr(s.sym)}" target="_blank" rel="noopener">Screener</a></span>
-        <small>${esc(s.sector)}</small>${bucket!=="Ready"?`<small style="max-width:200px;white-space:normal">${esc(s.why)}</small>`:""}</td>
+        <small>${esc(s.sector)}</small>${s.earn_soon?`<small style="color:var(--warn);font-weight:600">⚠ results in ${s.edays} ${s.edays===1?"day":"days"}</small>`:""}${bucket!=="Ready"?`<small style="max-width:200px;white-space:normal">${esc(s.why)}</small>`:""}</td>
       <td>${fmt(s.price,2)}</td>
       <td><span class="dots" aria-label="Score ${s.score} of 6">${[0,1,2,3,4,5].map(i=>`<i class="${i < Math.round(s.score) ? 'on':''}"></i>`).join("")}</span></td>
+      <td class="${s.rs>=80?'ok':s.rs!=null&&s.rs<50?'bad':''}">${s.rs??"–"}</td>
       ${ck(s.mon, {OK:"Monthly uptrend",Mixed:"Monthly mixed",Weak:"Monthly weak"}[s.mon]||"No monthly data", s.mon_txt)}
       ${ck(s.wk_ok?"OK":s.wk==="Base"||s.wk==="In trend"?"Mixed":"Weak", s.wk||"No setup", s.wk_txt)}
       ${ck(s.day, s.day==="Good"?"Timing good":s.day==="Wait"?"Wait":s.day==="Weak"?"Weak":"Neutral", s.day_txt)}
       <td class="l">${s.q?`<span class="chip" style="--c:var(${QC[s.q]||'--muted'})">${esc(s.q)}</span>`:'<span class="mut">–</span>'}</td>
       <td>${s.stop?`₹${fmt(s.stop,2)}<small class="mut" style="display:block">−${fmt(s.stop_pct)}% · ${esc(s.stop_from)}</small>`:'<span class="mut">none</span>'}</td>
-      <td>${s.room!=null?`+${fmt(s.room)}%<small class="mut" style="display:block">to ₹${fmt(s.res,2)}</small>`:'<span class="mut">clear</span>'}</td>
+      <td>${s.t1?`₹${fmt(s.t1.p,2)} <span class="ok">+${fmt(s.t1.up)}%</span><small class="mut" style="display:block">${esc(s.t1.k)}${s.t2?` · T2 ₹${fmt(s.t2.p,0)}`:""}</small>`:'<span class="mut">–</span>'}</td>
       <td class="${s.rr==null?'mut':s.rr>=D.cfg.good_rr?'ok':'mid'}">${s.rr!=null?fmt(s.rr)+"×":"–"}</td>
+      <td>${s.room!=null?`+${fmt(s.room)}%<small class="mut" style="display:block">₹${fmt(s.res,2)}</small>`:'<span class="mut">clear</span>'}</td>
       <td>${s.qty!=null?s.qty.toLocaleString("en-IN"):"–"}</td></tr>`).join("")
     || `<tr><td class="mut" colspan="${COLS.length}">Nothing in this group with these filters today.</td></tr>`}</tbody>`;
   t.querySelectorAll("th").forEach(th=>th.addEventListener("click",()=>{ const k=th.dataset.k;
@@ -193,7 +201,7 @@ function drawTable(){
 function drawAll(){ drawBuckets(); drawTable(); }
 const fs = document.getElementById("f-sec");
 fs.innerHTML = `<option value="">All sectors</option>` + [...new Set(D.stocks.map(s=>s.sector))].sort().map(s=>`<option>${esc(s)}</option>`).join("");
-["f-sec","f-wk","liq"].forEach(id=>document.getElementById(id).addEventListener("change",()=>{ showAll=false; drawAll(); }));
+["f-sec","f-wk","liq","f-rs","noearn"].forEach(id=>document.getElementById(id).addEventListener("change",()=>{ showAll=false; drawAll(); }));
 document.getElementById("q").addEventListener("input",()=>{ showAll=false; drawAll(); });
 [cap,risk].forEach(el=>el.addEventListener("input",()=>{ store.set(el.id, el.value); drawTable(); }));
 document.getElementById("more").addEventListener("click",()=>{ showAll=true; drawTable(); });

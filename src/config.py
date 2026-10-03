@@ -107,3 +107,12 @@ SETUP = {
     "max_stop_pct": 15,        # cap: stops further than this make the trade too wide
     "good_rr": 2.0,            # reward-to-risk to the next weekly resistance
 }
+
+# ---------- Relative strength rank, market regime, earnings, Fibonacci ----------
+RS_WEIGHTS = {63: 0.4, 126: 0.2, 189: 0.2, 252: 0.2}   # 3/6/9/12-month returns, recent months count double
+EARNINGS_WARN_DAYS = 14        # warn when results are due within this many days
+FIB = {
+    "d": {"lookback": 120, "min_move": 0.10, "pivot": 5},   # daily: swing of 10%+ within ~6 months
+    "w": {"lookback": 52, "min_move": 0.15, "pivot": 3},    # weekly: swing of 15%+ within a year
+    "confluence": 0.02,        # a fib level within 2% of support / Kijun counts as confluence
+}

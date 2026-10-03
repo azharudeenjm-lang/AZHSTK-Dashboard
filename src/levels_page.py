@@ -30,18 +30,18 @@ TEMPLATE = r"""<!doctype html>
 <style>
 :root{
   --bg:#EEF2F6; --panel:#FFFFFF; --ink:#16243A; --muted:#5C6B80; --line:#D3DBE5; --up:#1E8F5A; --down:#C2453B; --focus:#2F62C8;
-  --s-brk:#1E8F5A; --s-tlb:#13857A; --s-ret:#2F62C8; --s-tls:#6B4BB8; --s-ns:#4F7C5F; --s-bd:#C2453B; --s-tbd:#A8285E; --s-nr:#C9780F;
+  --s-brk:#1E8F5A; --s-tlb:#13857A; --s-ret:#2F62C8; --s-tls:#6B4BB8; --s-fib:#8A5A12; --s-ns:#4F7C5F; --s-bd:#C2453B; --s-tbd:#A8285E; --s-nr:#C9780F;
   --z-bear:#C2453B; --z-os:#6B4BB8; --z-acc:#2F62C8; --z-bull:#1E8F5A; --z-ob:#C9780F; --z-dang:#A8285E; --z-neu:#A3AFBF;
   --font:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
 }
 @media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
   --bg:#111925; --panel:#18222F; --ink:#E5EBF3; --muted:#93A1B4; --line:#2A3646; --up:#3FBF85; --down:#E9675C; --focus:#6E97F0;
-  --s-brk:#3FBF85; --s-tlb:#3BB8AA; --s-ret:#6E97F0; --s-tls:#9C82E6; --s-ns:#7FB08F; --s-bd:#E9675C; --s-tbd:#E0619A; --s-nr:#E5A040;
+  --s-brk:#3FBF85; --s-tlb:#3BB8AA; --s-ret:#6E97F0; --s-tls:#9C82E6; --s-fib:#D4A049; --s-ns:#7FB08F; --s-bd:#E9675C; --s-tbd:#E0619A; --s-nr:#E5A040;
   --z-bear:#E9675C; --z-os:#9C82E6; --z-acc:#6E97F0; --z-bull:#3FBF85; --z-ob:#E5A040; --z-dang:#E0619A; --z-neu:#5E6B7C;}}
 :root[data-theme="dark"]{
   --bg:#111925; --panel:#18222F; --ink:#E5EBF3; --muted:#93A1B4; --line:#2A3646; --up:#3FBF85; --down:#E9675C; --focus:#6E97F0;
-  --s-brk:#3FBF85; --s-tlb:#3BB8AA; --s-ret:#6E97F0; --s-tls:#9C82E6; --s-ns:#7FB08F; --s-bd:#E9675C; --s-tbd:#E0619A; --s-nr:#E5A040;
+  --s-brk:#3FBF85; --s-tlb:#3BB8AA; --s-ret:#6E97F0; --s-tls:#9C82E6; --s-fib:#D4A049; --s-ns:#7FB08F; --s-bd:#E9675C; --s-tbd:#E0619A; --s-nr:#E5A040;
   --z-bear:#E9675C; --z-os:#9C82E6; --z-acc:#6E97F0; --z-bull:#3FBF85; --z-ob:#E5A040; --z-dang:#E0619A; --z-neu:#5E6B7C;}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *,*::before,*::after{box-sizing:inherit}
@@ -62,7 +62,7 @@ h3{font-size:.9rem;margin:0 0 8px;font-weight:600;color:var(--muted)}
 .seg button{border:0;background:transparent;color:var(--muted);font:500 .88rem var(--font);padding:7px 16px;cursor:pointer}
 .seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
 .sigs{display:grid;gap:8px;grid-template-columns:repeat(2,minmax(0,1fr))}
-@media(min-width:760px){.sigs.b{grid-template-columns:repeat(5,minmax(0,1fr))}.sigs.r{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(min-width:760px){.sigs.b{grid-template-columns:repeat(3,minmax(0,1fr))}.sigs.r{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .sg{border:1px solid var(--line);border-left:5px solid var(--c);background:var(--panel);border-radius:10px;padding:10px 12px;text-align:left;font:inherit;color:var(--ink);cursor:pointer}
 .sg .n{font-size:1.6rem;font-weight:700;line-height:1.1;display:block}
 .sg .t{font-weight:600;font-size:.88rem}
@@ -109,7 +109,7 @@ dt{font-weight:600} dd{margin:0;color:var(--muted);max-width:70ch}
 <header>
   <h1>Support, resistance and trendlines</h1>
   <div id="gsearch"></div>
-  <nav aria-label="Dashboards"><a href="index.html">Sector rotation</a><a href="zones.html">Zones</a><a href="levels.html" aria-current="page">Levels</a><a href="setups.html">Setups</a><a href="backtest.html">Backtest</a></nav>
+  <nav aria-label="Dashboards"><a href="index.html">Sector rotation</a><a href="zones.html">Zones</a><a href="levels.html" aria-current="page">Levels</a><a href="setups.html">Setups</a><a href="watchlist.html">My list</a><a href="backtest.html">Backtest</a></nav>
 </header>
 <div class="top">
   <p class="stamp" id="gen"></p>
@@ -146,10 +146,10 @@ dt{font-weight:600} dd{margin:0;color:var(--muted);max-width:70ch}
 
 <script>
 const D = __DATA__;
-const BULL = ["Breakout","Trendline breakout","Retest","At trendline support","Near support"];
+const BULL = ["Breakout","Trendline breakout","Retest","At trendline support","At Fibonacci support","Near support"];
 const BEAR = ["Breakdown","Trendline breakdown","Near resistance"];
-const SC = {"Breakout":"--s-brk","Trendline breakout":"--s-tlb","Retest":"--s-ret","At trendline support":"--s-tls","Near support":"--s-ns","Breakdown":"--s-bd","Trendline breakdown":"--s-tbd","Near resistance":"--s-nr"};
-const SDESC = {"Breakout":"closed above tested resistance","Trendline breakout":"closed above a falling line","Retest":"pulled back to a broken level","At trendline support":"resting on a rising line","Near support":"just above a support level","Breakdown":"closed below tested support","Trendline breakdown":"closed below a rising line","Near resistance":"just under a resistance level"};
+const SC = {"Breakout":"--s-brk","Trendline breakout":"--s-tlb","Retest":"--s-ret","At trendline support":"--s-tls","At Fibonacci support":"--s-fib","Near support":"--s-ns","Breakdown":"--s-bd","Trendline breakdown":"--s-tbd","Near resistance":"--s-nr"};
+const SDESC = {"Breakout":"closed above tested resistance","Trendline breakout":"closed above a falling line","Retest":"pulled back to a broken level","At trendline support":"resting on a rising line","At Fibonacci support":"pulled back into the 50–61.8% zone","Near support":"just above a support level","Breakdown":"closed below tested support","Trendline breakdown":"closed below a rising line","Near resistance":"just under a resistance level"};
 const ZORDER = ["Bearish","Oversold","Accumulation","Bullish","Overbought","Danger zone","Neutral"];
 const ZC = {"Bearish":"--z-bear","Oversold":"--z-os","Accumulation":"--z-acc","Bullish":"--z-bull","Overbought":"--z-ob","Danger zone":"--z-dang","Neutral":"--z-neu"};
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
@@ -274,6 +274,7 @@ function drawRules(){
     <dt>Trendline breakout</dt><dd>A falling line through two or more lower swing highs that no close had broken, and price closed at least ${p.brk*100}% above it in the last ${p.recent} ${u}.</dd>
     <dt>Retest</dt><dd>Broke out between ${p.recent} and ${p.retest} ${u} ago and has since pulled back to within a small distance of that level while still closing above it.</dd>
     <dt>At trendline support</dt><dd>A rising line through two or more higher swing lows that no close has broken, with price within ${p.near_tl*100}% above it.</dd>
+    <dt>At Fibonacci support</dt><dd>On the latest upswing of at least ${tf==="d"?"10":"15"}%, price has pulled back into the 50–61.8% retracement (the "golden pocket"), or to 38.2–50% where that level lines up with support, a rising trendline or the weekly Kijun. Retracement levels and targets are in each stock's Overview.</dd>
     <dt>Near support</dt><dd>Price is within ${p.near*100}% above the nearest support level.</dd>
     <dt>Breakdown</dt><dd>Closed at least ${p.brk*100}% below a support level in the last ${p.recent} ${u}.</dd>
     <dt>Trendline breakdown</dt><dd>Closed at least ${p.brk*100}% below a valid rising trendline in the last ${p.recent} ${u}.</dd>

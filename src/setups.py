@@ -23,7 +23,9 @@ For every stock it answers six questions and sorts the stock into a bucket:
 import numpy as np
 import pandas as pd
 
-from .config import SETUP, WEEKLY_LIVE
+from datetime import date
+
+from .config import EARNINGS_WARN_DAYS, SETUP, WEEKLY_LIVE
 from .zones import weekly_bars
 
 PULLBACK = {"Retest", "At trendline support", "Near support"}
@@ -62,7 +64,10 @@ def _last_pivot_low(low, k=3, look=30):
     return None
 
 
-def build(px, universe, zd, zw, ld, lw, sectors):
+def build(px, universe, zd, zw, ld, lw, sectors, rs=None, regime=None, earn=None, fibs=None):
+    rs, earn, fibs = rs or {}, earn or {}, fibs or {"d": {}, "w": {}}
+    risk_off = (regime or {}).get("state") == "Risk-off"
+    today = date.today()
     close, high, low = px["Close"], px["High"], px["Low"]
     tick = [t for t in universe["ticker"] if t in close.columns]
     secq = {s["sector"]: s.get("q_w") for s in sectors}
@@ -107,8 +112,12 @@ def build(px, universe, zd, zw, ld, lw, sectors):
             b = sorted(sig_w & BREAKOUT)[0]
             vx = (Lw.get("brk") or {}).get("vx") or (Lw.get("tlr") or {}).get("vx")
             setup, wk_txt = "Breakout", f"weekly {b.lower()}" + (f", {vx:.1f}× volume" if vx else "")
-        elif wz == "Bullish" and sig_w & PULLBACK:
-            setup, wk_txt = "Pullback", "Bullish, " + ", ".join(sorted(sig_w & PULLBACK)).lower()
+        elif wz == "Bullish" and (sig_w & PULLBACK or (fibs["w"].get(t) or {}).get("status") in ("Golden pocket", "38–50%")):
+            bits = [x.lower() for x in sorted(sig_w & PULLBACK)]
+            fs = (fibs["w"].get(t) or {}).get("status")
+            if fs in ("Golden pocket", "38–50%"):
+                bits.append(f"fib {fs.lower()}")
+            setup, wk_txt = "Pullback", "Bullish, " + ", ".join(bits)
         elif wz == "Bullish":
             setup, wk_txt = "In trend", f"Bullish for {wdays} weeks, no pullback yet"
         elif wz == "Accumulation":
@@ -158,16 +167,32 @@ def build(px, universe, zd, zw, ld, lw, sectors):
         stop_pct = (price - stop[1]) / price * 100 if stop else None
         res = (Lw.get("res") or {}).get("p")
         room = (res / price - 1) * 100 if res else None
-        rr = (room / stop_pct) if (room is not None and stop_pct) else None
-        room_ok = rr is None or rr >= SETUP["good_rr"]   # no resistance overhead counts as room
+        fw = fibs["w"].get(t) or {}
+        tg = [x for x in fw.get("t", []) if x["p"] > price]
+        t1 = tg[0] if tg else None
+        target = t1["p"] if t1 else res                    # reward measured to fib T1, else resistance
+        up = (target / price - 1) * 100 if target else None
+        rr = (up / stop_pct) if (up is not None and stop_pct) else None
+        room_ok = rr is None or rr >= SETUP["good_rr"]   # no target / resistance overhead counts as room
+
+        # ---- relative strength, earnings ----
+        rsr = rs.get(t)
+        ed = earn.get(t[:-3])
+        edays = (date.fromisoformat(ed) - today).days if ed else None
+        earn_soon = edays is not None and 0 <= edays <= EARNINGS_WARN_DAYS
 
         # ---- bucket ----
         mon_ok, mon_mid = mon == "OK", mon == "Mixed"
         if wk_bad or (wk_ok and mon == "Weak"):
             bucket = "Avoid"
             why = f"weekly {wz.lower()}" if wk_bad else "weekly setup against a weak monthly trend"
-        elif wk_ok and mon_ok and day == "Good" and sec != "Weak" and stop and room_ok:
+        elif (wk_ok and mon_ok and day == "Good" and sec != "Weak" and stop and room_ok
+              and not earn_soon and not (risk_off and (sec != "OK" or (rsr or 0) < 70))):
             bucket, why = "Ready", "all three timeframes agree"
+        elif wk_ok and mon_ok and day == "Good" and sec != "Weak" and stop and room_ok and earn_soon:
+            bucket, why = "Setting up", f"results due in {edays} days: wait until after"
+        elif wk_ok and mon_ok and day == "Good" and sec != "Weak" and stop and room_ok and risk_off:
+            bucket, why = "Setting up", "risk-off market: needs a Leading or Improving sector and RS 70+"
         elif wk_ok and (mon_ok or mon_mid):
             bucket = "Setting up"
             why = ("daily: " + day_txt) if day != "Good" else ("sector lagging" if sec == "Weak" else
@@ -189,6 +214,8 @@ def build(px, universe, zd, zw, ld, lw, sectors):
             "stop_from": stop[0] if stop else None,
             "res": round(res, 2) if res else None, "room": round(room, 1) if room is not None else None,
             "rr": round(rr, 1) if rr is not None else None,
+            "rs": rsr, "earn": ed, "edays": edays, "earn_soon": earn_soon,
+            "t1": t1, "t2": tg[1] if len(tg) > 1 else None, "fib": fw.get("status"),
         }
         ser = m[t].dropna().tail(60)
         mdata[t] = {"c": [float(f"{x:.4g}") for x in ser], "d": [d.strftime("%Y-%m") for d in ser.index],

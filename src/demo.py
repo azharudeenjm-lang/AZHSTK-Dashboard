@@ -11,6 +11,7 @@ SECTORS = ["Chemicals", "Information Technology", "Financial Services", "Healthc
 def make_demo(benchmark, n_per=40, days=1250, seed=7):
     rng = np.random.default_rng(seed)
     idx = pd.bdate_range(end=pd.Timestamp.today().normalize(), periods=days)
+    days = len(idx)
     mkt = rng.normal(0.0004, 0.009, days)
     close, vol, rows, fund = {}, {}, [], []
     for si, sec in enumerate(SECTORS):
