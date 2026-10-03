@@ -12,9 +12,10 @@ import time
 
 import pandas as pd
 
-from src import (analytics, backtest, backtest_page, dashboard, levels, levels_page, profiles,
-                 setups, setups_page, zones, zones_page)
-from src.config import BENCHMARK, NEWS_TOP_MOVERS
+from src import (analytics, backtest, backtest_page, dashboard, earnings, fib, levels, levels_page, profiles,
+                 setups, setups_page, strength, watchlist_page, zones, zones_page)
+import json
+from src.config import BENCHMARK, DOCS, NEWS_TOP_MOVERS
 
 
 def clean(o):
@@ -106,6 +107,22 @@ def main():
     print("   levels (daily + weekly)")
     ld = levels.build_levels(px["Close"], px["High"], px["Low"], px["Volume"], tick, "d")
     lw = levels.build_levels(px["Close"], px["High"], px["Low"], px["Volume"], tick, "w")
+    print("   fibonacci, relative strength, regime, earnings")
+    fibs = fib.build(px, tick, ld, lw)
+    for tf, lv in (("d", ld), ("w", lw)):          # golden-pocket pullbacks become a Levels signal
+        for t, f in fibs[tf].items():
+            if f["status"] == "Golden pocket" or (f["status"] == "38–50%" and f["conf"]):
+                row = lv.setdefault(t, {"sig": []})
+                if "At Fibonacci support" not in row["sig"]:
+                    row["sig"].append("At Fibonacci support")
+    liq = pd.Series({s["sym"] + ".NS": bool(s["liquid"]) for s in stocks})
+    rs = strength.rs_rank(px["Close"].drop(columns=[BENCHMARK], errors="ignore"), liq)
+    reg = strength.regime(px["Close"], BENCHMARK, liq)
+    earn = {} if a.demo else earnings.fetch()
+    if a.demo:   # a few fake dates so the warning can be seen
+        earn = {s["sym"]: (datetime.now() + timedelta(days=5 + i)).strftime("%Y-%m-%d") for i, s in enumerate(stocks[:40:3])}
+    print(f"  market regime: {reg['state']} (score {reg['score']})")
+    (DOCS / "regime.json").write_text(json.dumps(clean(reg)), encoding="utf-8")
     volx = {s["sym"]: s.get("vol_x") for s in stocks}
     lrows = []
     for r in zrows:
@@ -122,19 +139,21 @@ def main():
                 charts.setdefault(r["sym"], {})[tf] = r[tf].pop("ch")
     levels_page.render(clean({"stocks": lrows, "partial": partial, "asof": asof}), clean(charts))
     print("   trade setups (monthly + weekly + daily)")
-    su, mon = setups.build(px, universe, zd, zw, ld, lw, sectors)
+    su, mon = setups.build(px, universe, zd, zw, ld, lw, sectors, rs, reg, earn, fibs)
     srows = []
     for s in stocks:
         t = s["sym"] + ".NS"
         if t in su:
             srows.append({"sym": s["sym"], "name": s["name"], "sector": s["sector"], "liquid": s["liquid"],
                           "price": s.get("price"), **su[t]})
-    setups_page.render(clean({"stocks": srows}))
+    setups_page.render(clean({"stocks": srows, "regime": reg}))
+    watchlist_page.render()
     print("   stock profiles")
     gen = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%d %b %Y, %I:%M %p IST")
     profiles.write(clean(stocks), clean(sectors), clean({"d": zd, "w": zw}), clean({"d": hd, "w": hw}),
                    clean({"d": ld, "w": lw}), fmap, {"d": dates_d, "w": dates_w}, gen,
-                   {"partial": partial, "asof": asof}, clean(su), clean(mon))
+                   {"partial": partial, "asof": asof}, clean(su), clean(mon),
+                   extra={"rs": rs, "earn": earn, "fib": clean(fibs)})
     zones_page.render(clean({"stocks": zrows,
                              "tf": {"d": {"dates": dates_d, "lb_start": lb_d},
                                     "w": {"dates": dates_w, "lb_start": lb_w,
