@@ -50,6 +50,8 @@ ZONE_PARAMS = {
         "ob_window": 20, "ob_bars": 8,          # danger: RSI>=70 on 8 of last 20
         "ma": 50, "stretch": 20,                # danger: 20%+ above 50-day average
         "rsi_floor": 60,                        # danger ends when RSI cools below this
+        "div_pivot": 5, "div_window": 60,       # divergence: compare swing highs up to 60 sessions apart
+        "div_active": 20, "div_rsi_min": 60,    # stays on up to 20 sessions; first peak needs RSI 60+
     },
     "w": {
         "label": "Weekly", "unit": "week", "units": "weeks",
@@ -61,6 +63,8 @@ ZONE_PARAMS = {
         "ob_window": 10, "ob_bars": 4,          # weekly RSI>=70 on 4 of last 10 weeks
         "ma": 30, "stretch": 30,                # 30%+ above 30-week average
         "rsi_floor": 60,
+        "div_pivot": 3, "div_window": 26,       # weekly: swing highs up to 26 weeks apart
+        "div_active": 8, "div_rsi_min": 60,     # stays on up to 8 weeks
     },
 }
 
@@ -92,7 +96,7 @@ WEEKLY_LIVE = True
 # ---------- Backtest (backtest.html) ----------
 BACKTEST = {
     "history": "10y",          # weekly bars downloaded straight from Yahoo
-    "floors": [55, 60, 65],    # Danger zone RSI floors to compare
+    "floors": [55, 60, 65],    # Extended-zone RSI floors to compare
     "cost_pct": 0.3,           # round-trip brokerage + taxes + slippage, in %
     "min_turnover_cr": 1.0,    # liquid at entry: avg daily traded value, Rs crore
 }
@@ -116,3 +120,6 @@ FIB = {
     "w": {"lookback": 52, "min_move": 0.15, "pivot": 3},    # weekly: swing of 15%+ within a year
     "confluence": 0.02,        # a fib level within 2% of support / Kijun counts as confluence
 }
+
+# ---------- Screener (screener.html) ----------
+SCREENER_EVENT_BARS = 10    # crossovers/patterns are remembered for this many bars ("within N bars")

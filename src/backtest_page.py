@@ -39,13 +39,13 @@ TEMPLATE = r"""<!doctype html>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#EEF2F6;--panel:#FFFFFF;--ink:#16243A;--muted:#5C6B80;--line:#D3DBE5;--up:#1E8F5A;--down:#C2453B;--focus:#2F62C8;
-  --z-acc:#2F62C8;--z-bull:#1E8F5A;--z-ob:#C9780F;--z-dang:#A8285E;
+  --z-acc:#2F62C8;--z-bull:#1E8F5A;--z-ob:#13857A;--z-dang:#0B6B4B;
   --font:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#111925;--panel:#18222F;--ink:#E5EBF3;--muted:#93A1B4;--line:#2A3646;--up:#3FBF85;--down:#E9675C;--focus:#6E97F0;
-  --z-acc:#6E97F0;--z-bull:#3FBF85;--z-ob:#E5A040;--z-dang:#E0619A}}
+  --z-acc:#6E97F0;--z-bull:#3FBF85;--z-ob:#3BB8AA;--z-dang:#5CC79A}}
 :root[data-theme="dark"]{--bg:#111925;--panel:#18222F;--ink:#E5EBF3;--muted:#93A1B4;--line:#2A3646;--up:#3FBF85;--down:#E9675C;--focus:#6E97F0;
-  --z-acc:#6E97F0;--z-bull:#3FBF85;--z-ob:#E5A040;--z-dang:#E0619A}
+  --z-acc:#6E97F0;--z-bull:#3FBF85;--z-ob:#3BB8AA;--z-dang:#5CC79A}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *,*::before,*::after{box-sizing:inherit}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 var(--font);font-variant-numeric:tabular-nums;-webkit-text-size-adjust:100%}
@@ -104,11 +104,11 @@ button:focus-visible,select:focus-visible,input:focus-visible,tr:focus-visible{o
 
 <section class="panel">
   <h2>The strategy, on weekly charts</h2>
-  <div class="flow"><span class="chip" style="--c:var(--z-acc)">Accumulation</span><span class="arrow">→</span><span class="chip" style="--c:var(--z-bull)">Bullish</span><b>buy</b><span class="arrow">→</span><span class="chip" style="--c:var(--z-ob)">Overbought</span><span class="arrow">→</span><span class="chip" style="--c:var(--z-dang)">Danger zone</span><span class="arrow">→</span><b>sell when Danger ends</b></div>
+  <div class="flow"><span class="chip" style="--c:var(--z-acc)">Accumulation</span><span class="arrow">→</span><span class="chip" style="--c:var(--z-bull)">Bullish</span><b>buy</b><span class="arrow">→</span><span class="chip" style="--c:var(--z-ob)">Strong momentum</span><span class="arrow">→</span><span class="chip" style="--c:var(--z-dang)">Extended</span><span class="arrow">→</span><b>sell when Extended ends or divergence appears</b></div>
   <div class="rules">
     <div><b>Entry</b>The week a stock moves from Accumulation to Bullish, at that week's close. It must have been liquid at the time.</div>
-    <div><b>Exit when it cools</b>The week it leaves Danger zone, in any direction. The Danger zone RSI floor (55, 60 or 65) decides how soon that happens.</div>
-    <div><b>Exit when it fails</b>It drops to Neutral, Bearish, Oversold or Accumulation before reaching Danger. In the "exit" variant, it also sells if Overbought slips back to Bullish.</div>
+    <div><b>Exit when it cools</b>The week it leaves Extended, in any direction, or enters the Divergence zone (price higher high, RSI or MACD lower high). The Extended RSI floor (55, 60 or 65) decides how soon Extended ends.</div>
+    <div><b>Exit when it fails</b>It drops to Neutral, Bearish, Oversold or Accumulation before reaching Extended. In the "exit" variant, it also sells if Strong momentum slips back to Bullish.</div>
   </div>
 </section>
 
@@ -138,7 +138,7 @@ button:focus-visible,select:focus-visible,input:focus-visible,tr:focus-visible{o
   <p class="sub" id="tsub"></p>
   <div class="tools">
     <select id="f-st" aria-label="Status"><option value="closed">Closed trades</option><option value="open">Open now (still holding)</option><option value="all">All</option></select>
-    <select id="f-peak" aria-label="Furthest zone reached"><option value="">Any furthest zone</option><option>Bullish</option><option>Overbought</option><option>Danger zone</option></select>
+    <select id="f-peak" aria-label="Furthest zone reached"><option value="">Any furthest zone</option><option>Bullish</option><option>Strong momentum</option><option>Extended</option></select>
     <select id="f-sec" aria-label="Sector"></select>
     <input type="search" id="q" placeholder="Find a stock" aria-label="Find a stock">
   </div>
@@ -164,8 +164,8 @@ const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">
 const fmt = (v,d=1) => v==null ? "–" : Number(v).toLocaleString("en-IN",{minimumFractionDigits:d,maximumFractionDigits:d});
 const pc = (v,d=1) => v==null ? `<span class="mut">–</span>` : `<span class="${v>0?'up':v<0?'down':''}">${v>0?'+':''}${fmt(v,d)}%</span>`;
 const dl = s => s ? new Date(s+"T00:00:00").toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "";
-const ZC = {"Bullish":"--z-bull","Overbought":"--z-ob","Danger zone":"--z-dang"};
-const vname = v => `Danger floor ${v.floor} · ${v.v==="hold"?"hold through pullbacks":"exit if Overbought falls back"}`;
+const ZC = {"Bullish":"--z-bull","Strong momentum":"--z-ob","Extended":"--z-dang"};
+const vname = v => `Extended floor ${v.floor} · ${v.v==="hold"?"hold through pullbacks":"exit if momentum falls back"}`;
 const tv = s => "https://www.tradingview.com/chart/?symbol=" + encodeURIComponent("NSE:" + s.replace(/[&-]/g,"_")) + "&interval=W";
 const scr = s => "https://www.screener.in/company/" + encodeURIComponent(s) + "/";
 
@@ -177,7 +177,7 @@ document.getElementById("vsub").textContent = "Tap a row to see its details and 
 
 function drawVariants(){
   const t = document.getElementById("vt");
-  t.innerHTML = `<thead><tr><th>Variant</th><th>Trades</th><th>Win rate</th><th>Avg / trade</th><th>Median</th><th>Avg win</th><th>Avg loss</th><th>Profit factor</th><th>Avg weeks held</th><th>vs NIFTY</th><th>Reached Danger</th><th>Open now</th></tr></thead><tbody>${
+  t.innerHTML = `<thead><tr><th>Variant</th><th>Trades</th><th>Win rate</th><th>Avg / trade</th><th>Median</th><th>Avg win</th><th>Avg loss</th><th>Profit factor</th><th>Avg weeks held</th><th>vs NIFTY</th><th>Reached Extended</th><th>Open now</th></tr></thead><tbody>${
     V.map(v=>`<tr data-k="${v.key}" class="${v.key===cur?'on':''}" tabindex="0"><td class="l">${esc(vname(v))}${v.key===bestKey?'<span class="best">Best</span>':''}</td>
       <td>${v.n}</td><td>${fmt(v.win)}%</td><td>${pc(v.avg,2)}</td><td>${pc(v.med,2)}</td><td>${pc(v.aw)}</td><td>${pc(v.al)}</td>
       <td>${fmt(v.pf,2)}</td><td>${fmt(v.wk)}</td><td>${pc(v.edge,2)}</td><td>${fmt(v.danger)}%</td><td>${v.open}</td></tr>`).join("")}</tbody>`;

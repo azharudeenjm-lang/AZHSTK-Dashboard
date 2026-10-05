@@ -89,7 +89,7 @@ textarea{width:100%;min-height:90px;font:12px/1.4 ui-monospace,Menlo,Consolas,mo
 
 <section class="panel" aria-labelledby="h-bak">
   <h2 id="h-bak">Backup</h2>
-  <p class="sub">Your list lives in this browser. To use it on another phone or laptop, export here and import there.</p>
+  <p class="sub">Your watchlist, trades and saved screens live in this browser. To use them on another phone or laptop, export here and import there.</p>
   <div class="row"><button class="btn" id="exp">Download backup file</button><button class="btn" id="copy">Copy backup text</button>
     <label class="btn" style="display:inline-block">Import file<input type="file" id="imp" accept="application/json,.json" hidden></label></div>
   <p class="sub" style="margin-top:10px">Or paste backup text and tap Import:</p>
@@ -107,7 +107,7 @@ const pc = (v,d=1) => v==null||isNaN(v) ? '<span class="mut">–</span>' : `<spa
 const rs = v => { if (v==null||isNaN(v)) return '<span class="mut">–</span>'; if (Math.abs(v) < 0.5) return "₹0";
   return `<span class="${v>0?'up':'down'}">${v>0?'+':'−'}₹${fmt(Math.abs(v),0)}</span>`; };
 const dl = s => s ? new Date(s+"T00:00:00").toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "";
-const ZC = {"Bearish":"#C2453B","Oversold":"#6B4BB8","Accumulation":"#2F62C8","Bullish":"#1E8F5A","Overbought":"#C9780F","Danger zone":"#A8285E","Neutral":"#8C99AB"};
+const ZC = {"Bearish":"#C2453B","Oversold":"#6B4BB8","Accumulation":"#2F62C8","Bullish":"#1E8F5A","Strong momentum":"#13857A","Extended":"#0B6B4B","Divergence zone":"#A8285E","Neutral":"#8C99AB"};
 const BC = {"Ready":"#1E8F5A","Setting up":"#2F62C8","Watchlist":"#6B4BB8","Avoid":"#C2453B"};
 const chip = (t,c) => t ? `<span class="chip" style="--c:${c||'#8C99AB'}">${esc(t)}</span>` : '<span class="mut">–</span>';
 const shard = s => s.toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,2) || "0";
@@ -123,10 +123,11 @@ function warnings(t, p){
   else if (t.stop && (px/t.stop-1)*100 <= 3) out.push(["amb","Near stop"]);
   if (t.target && px >= t.target) out.push(["grn","Target reached"]);
   const after = (zw.segs||[]).filter(g => g[2] >= t.date);
-  if (after.some(g=>g[0]==="D") && zw.zone !== "Danger zone") out.push(["red","Cooled from Danger: exit signal"]);
+  if (zw.zone === "Divergence zone") out.push(["red","Weekly divergence: momentum fading, consider exit"]);
+  else if (after.some(g=>g[0]==="D") && zw.zone !== "Extended") out.push(["amb","Cooled from Extended: consider exit"]);
   if (["Neutral","Bearish","Oversold"].includes(zw.zone)) out.push(["red",`Weekly ${zw.zone.toLowerCase()}: trend broke`]);
-  if (zw.zone === "Danger zone") out.push(["amb","Weekly Danger zone: tighten stop"]);
-  if (["Overbought","Danger zone"].includes(zd.zone)) out.push(["amb","Daily overheated: consider partial profit"]);
+  if (zw.zone === "Extended") out.push(["amb","Weekly extended: trail the stop up"]);
+  if (zd.zone === "Divergence zone") out.push(["amb","Daily divergence: early warning"]);
   const e = ddays(p.earn); if (e!=null && e>=0 && e<=14) out.push(["amb",`Results in ${e} ${e===1?"day":"days"}`]);
   if (!out.length) out.push(["mut","No warnings"]);
   return out;
@@ -194,6 +195,7 @@ document.getElementById("copy").onclick = () => { navigator.clipboard.writeText(
 function doImport(text){ try { const d = JSON.parse(text); if (typeof d!=="object" || !d) throw 0;
     const cur = WL.get(); d.watch = {...cur.watch, ...(d.watch||{})};
     const ids = new Set(cur.trades.map(t=>String(t.id))); d.trades = [...cur.trades, ...(d.trades||[]).filter(t=>!ids.has(String(t.id)))];
+    const names = new Set((cur.screens||[]).map(x=>x.name)); d.screens = [...(cur.screens||[]), ...(d.screens||[]).filter(x=>!names.has(x.name))];
     WL.save(d); msg("Imported and merged with what was already here."); draw(); } catch(e){ msg("That doesn't look like a backup from this page."); } }
 document.getElementById("imp").onchange = e => { const f = e.target.files[0]; if (f) f.text().then(doImport); };
 document.getElementById("imp2").onclick = () => doImport(document.getElementById("paste").value);

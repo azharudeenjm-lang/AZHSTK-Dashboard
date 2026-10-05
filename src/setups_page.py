@@ -96,8 +96,8 @@ button.psym{all:unset;font-weight:700;cursor:pointer;border-bottom:1px dotted cu
   <details><summary style="cursor:pointer;font-weight:600">Three timeframes, three jobs</summary>
   <div class="tf" style="margin-top:10px">
     <div><b>Monthly: the tide</b><span>Is it safe to be long? Price above its 10-month average, monthly RSI 50 or higher, monthly MACD rising.</span></div>
-    <div><b>Weekly: the setup</b><span>A fresh trend (Accumulation → Bullish), a pullback inside a Bullish trend, or a weekly breakout.</span></div>
-    <div><b>Daily: the timing</b><span>Not overheated today. Best at support, on a breakout, or above last week's high. Daily Overbought or Danger means wait for a dip.</span></div>
+    <div><b>Weekly: the setup</b><span>A fresh trend (Accumulation → Bullish), fresh strong momentum, a pullback inside a Bullish trend, or a weekly breakout.</span></div>
+    <div><b>Daily: the timing</b><span>Not overheated today. Best at support, on a breakout, or above last week's high. A daily Divergence zone or Extended means wait.</span></div>
   </div></details>
 </section>
 
@@ -107,7 +107,7 @@ button.psym{all:unset;font-weight:700;cursor:pointer;border-bottom:1px dotted cu
   <div class="tools">
     <label class="tog">Capital ₹ <input type="number" id="cap" min="0" step="10000" inputmode="numeric" aria-label="Capital in rupees"></label>
     <label class="tog">Risk per trade <input type="number" id="risk" min="0.1" max="5" step="0.1" inputmode="decimal" aria-label="Risk per trade in percent" style="width:70px">%</label>
-    <select id="f-wk" aria-label="Weekly setup"><option value="">Any weekly setup</option><option>Fresh trend</option><option>Breakout</option><option>Pullback</option><option>Base</option><option>In trend</option></select>
+    <select id="f-wk" aria-label="Weekly setup"><option value="">Any weekly setup</option><option>Fresh trend</option><option>Breakout</option><option>Pullback</option><option>Momentum</option><option>Base</option><option>In trend</option></select>
     <select id="f-rs" aria-label="Minimum relative strength"><option value="0">Any RS</option><option value="50">RS 50+</option><option value="70">RS 70+</option><option value="80">RS 80+ (top 20%)</option><option value="90">RS 90+</option></select>
     <select id="f-sec" aria-label="Sector"></select>
     <label class="tog"><input type="checkbox" id="noearn"> Hide results within 2 weeks</label>
@@ -134,7 +134,7 @@ button.psym{all:unset;font-weight:700;cursor:pointer;border-bottom:1px dotted cu
 
 <script>
 const D = __DATA__;
-const BK = [["Ready","--b-ready","all three timeframes agree"],["Setting up","--b-set","weekly setup, waiting on daily"],["Watchlist","--b-watch","weekly base in a monthly uptrend"],["Avoid","--b-avoid","stretched, broken or against the tide"]];
+const BK = [["Ready","--b-ready","all three timeframes agree"],["Setting up","--b-set","weekly setup, waiting on daily"],["Watchlist","--b-watch","weekly base in a monthly uptrend"],["Avoid","--b-avoid","divergence, broken or against the tide"]];
 const QC = {Leading:"--b-ready",Improving:"--b-set",Weakening:"--warn",Lagging:"--b-avoid"};
 const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmt = (v,d=1) => v==null ? "–" : Number(v).toLocaleString("en-IN",{minimumFractionDigits:d,maximumFractionDigits:d});
@@ -174,7 +174,7 @@ function drawTable(){
   document.getElementById("ls").textContent = {Ready:"All three timeframes line up today. Check each chart before acting.",
     "Setting up":"The weekly setup is in place; the reason it isn't Ready yet is shown under the stock name.",
     Watchlist:"A weekly base is forming while the monthly trend is up. Watch for Accumulation → Bullish.",
-    Avoid:"Weekly Danger zone, Bearish or Oversold, or a weekly setup fighting a weak monthly trend."}[bucket];
+    Avoid:"Weekly Divergence zone, Bearish or Oversold, or a weekly setup fighting a weak monthly trend."}[bucket];
   const LIM = 150, S = showAll ? L : L.slice(0, LIM);
   const t = document.getElementById("t");
   t.innerHTML = `<thead><tr>${COLS.map(([k,l,c])=>`<th class="${c||''}" data-k="${k}" ${sort.k===k?`aria-sort="${sort.dir>0?'ascending':'descending'}"`:''}>${l}</th>`).join("")}</tr></thead><tbody>${

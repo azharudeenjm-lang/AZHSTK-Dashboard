@@ -6,9 +6,9 @@ Any element with data-p="SYMBOL" opens that stock's profile when clicked.
 
 PROFILE_JS = r"""(function(){
 const CSS = `
-:root{--pz-bear:#C2453B;--pz-os:#6B4BB8;--pz-acc:#2F62C8;--pz-bull:#1E8F5A;--pz-ob:#C9780F;--pz-dang:#A8285E;--pz-neu:#A3AFBF;--pz-na:#E1E6ED;
+:root{--pz-bear:#C2453B;--pz-os:#6B4BB8;--pz-acc:#2F62C8;--pz-bull:#1E8F5A;--pz-ob:#13857A;--pz-dang:#0B6B4B;--pz-div:#A8285E;--pz-neu:#A3AFBF;--pz-na:#E1E6ED;
   --pq-lead:#1E8F5A;--pq-weak:#B9821A;--pq-lag:#C2453B;--pq-impr:#2F62C8;--p-link:#2F62C8}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--pz-bear:#E9675C;--pz-os:#9C82E6;--pz-acc:#6E97F0;--pz-bull:#3FBF85;--pz-ob:#E5A040;--pz-dang:#E0619A;--pz-neu:#5E6B7C;--pz-na:#263140;
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--pz-bear:#E9675C;--pz-os:#9C82E6;--pz-acc:#6E97F0;--pz-bull:#3FBF85;--pz-ob:#3BB8AA;--pz-dang:#5CC79A;--pz-div:#E0619A;--pz-neu:#5E6B7C;--pz-na:#263140;
   --pq-lead:#3FBF85;--pq-weak:#E0AE45;--pq-lag:#E9675C;--pq-impr:#6E97F0;--p-link:#6E97F0}}
 .gsearch{position:relative;flex:1 1 260px;max-width:420px}
 .gsearch input{width:100%;font:inherit;font-size:.92rem;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
@@ -84,10 +84,10 @@ dialog.prof::backdrop{background:rgba(10,16,26,.55)}
 `;
 const st = document.createElement("style"); st.textContent = CSS; document.head.appendChild(st);
 
-const ZC = {"Bearish":"--pz-bear","Oversold":"--pz-os","Accumulation":"--pz-acc","Bullish":"--pz-bull","Overbought":"--pz-ob","Danger zone":"--pz-dang","Neutral":"--pz-neu","No data":"--pz-na"};
-const CODE = {R:"Bearish",O:"Oversold",A:"Accumulation",U:"Bullish",B:"Overbought",D:"Danger zone",N:"Neutral","-":"No data"};
+const ZC = {"Bearish":"--pz-bear","Oversold":"--pz-os","Accumulation":"--pz-acc","Bullish":"--pz-bull","Strong momentum":"--pz-ob","Extended":"--pz-dang","Divergence zone":"--pz-div","Neutral":"--pz-neu","No data":"--pz-na"};
+const CODE = {R:"Bearish",O:"Oversold",A:"Accumulation",U:"Bullish",B:"Strong momentum",D:"Extended",V:"Divergence zone",N:"Neutral","-":"No data"};
 const QC = {Leading:"--pq-lead",Weakening:"--pq-weak",Lagging:"--pq-lag",Improving:"--pq-impr"};
-const LS = {"Breakout":"--pz-bull","Trendline breakout":"--pz-bull","Retest":"--pz-acc","At trendline support":"--pz-os","Near support":"--pz-neu","Breakdown":"--pz-bear","Trendline breakdown":"--pz-dang","Near resistance":"--pz-ob"};
+const LS = {"Breakout":"--pz-bull","Trendline breakout":"--pz-bull","Retest":"--pz-acc","At trendline support":"--pz-os","At Fibonacci support":"--pq-weak","Near support":"--pz-neu","Breakdown":"--pz-bear","Trendline breakdown":"--pz-div","Near resistance":"--pq-weak"};
 const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmt = (v,d=1) => v==null ? "–" : Number(v).toLocaleString("en-IN",{minimumFractionDigits:d,maximumFractionDigits:d});
 const pct = (v,d=1) => { if (v==null) return '<span class="pf-mut">–</span>'; if (Math.abs(v) < 0.5*Math.pow(10,-d)) v = 0;
@@ -107,6 +107,42 @@ const WL = {
   get(){ const d = this.load(); d.watch = d.watch || {}; d.trades = d.trades || []; return d; },
 };
 window.AZH_WL = WL;
+
+/* ---------- screener: shared evaluator (Screener tab + pop-up) ---------- */
+let SMETA = null;
+const SCR = {
+  meta(){
+    if (!SMETA) SMETA = fetch("screener_meta.json").then(r=>r.ok?r.json():{conds:[],presets:[]}).catch(()=>({conds:[],presets:[]}))
+      .then(m=>{ m._by = Object.fromEntries((m.conds||[]).map(x=>[x.id,x])); SCR._m = m; return m; });
+    return SMETA; },
+  blank(){ return {name:"", mode:"all", conds:[], f:{liq:true}}; },
+  label(m, c, v){ const x = m._by[c.id]; if (!x) return c.id;
+    return `${c.tf==="w"?"W":"D"}: ${x.l}${x.k==="e" && v>0 ? ` (${v} ${c.tf==="w"?"wk":"bars"} ago)` : ""}`; },
+  hits(screen, r, m){
+    m = m || SCR._m; if (!m) return null;
+    const f = screen.f || {};
+    if (f.liq !== false && !r.liquid) return null;
+    if (f.es && r.es) return null;
+    if (f.zw && r.zw !== f.zw) return null;
+    if (f.zd && r.zd !== f.zd) return null;
+    if (f.bk && r.bucket !== f.bk) return null;
+    if (f.rs && !(r.rs >= f.rs)) return null;
+    if (f.sec && r.sector !== f.sec) return null;
+    if (f.q && !(f.q==="LI" ? ["Leading","Improving"].includes(r.q) : r.q===f.q)) return null;
+    if (f.pmin && !(r.price >= f.pmin)) return null;
+    if (f.pmax && !(r.price <= f.pmax)) return null;
+    const out = []; let n = 0;
+    for (const c of screen.conds || []){
+      const x = m._by[c.id]; const v = ((r.sig||{})[c.tf]||{})[c.id];
+      const ok = x && v != null && (x.k === "s" || v < (c.n || 1));
+      if (ok){ n++; out.push(SCR.label(m, c, v)); }
+      else if ((screen.mode||"all") === "all") return null;
+    }
+    if ((screen.conds||[]).length && !n) return null;
+    return out;
+  },
+};
+window.AZH_SCR = SCR;
 function mountRegime(){
   const wrap = document.querySelector(".wrap"), head = wrap && wrap.querySelector("header");
   if (!head) return;
@@ -171,7 +207,7 @@ async function openProfile(sym){
   dlg.innerHTML = `<div class="pf"><div class="pf-load">Loading ${esc(sym)}…</div></div>`;
   if (!dlg.open) dlg.showModal();
   history.replaceState(null,"","#stock="+encodeURIComponent(sym));
-  const [idx, p] = await Promise.all([loadIndex(), loadStock(sym)]);
+  const [idx, p] = await Promise.all([loadIndex(), loadStock(sym), SCR.meta()]);
   if (curSym!==sym) return;
   if (!p){ dlg.innerHTML = `<div class="pf"><div class="pf-h"><h2 id="pf-title">${esc(sym)}</h2><button class="pf-x" aria-label="Close">×</button></div><p class="pf-load">No data for this stock yet.</p></div>`;
     dlg.querySelector(".pf-x").onclick=()=>dlg.close(); return; }
@@ -249,6 +285,21 @@ function fibBlock(f, tf, px){
     <div class="pf-fib"><table><tbody><tr><td>Swing high</td><td>₹${fmt(f.H,2)}</td></tr>${rows}<tr><td>Swing low</td><td>₹${fmt(f.A,2)}</td></tr></tbody></table>
       <table><tbody>${f.t.length ? f.t.map((t,i)=>`<tr><td>T${i+1} · ${esc(t.k)}</td><td>₹${fmt(t.p,2)} <span class="pf-ok">+${fmt(t.up)}%</span></td></tr>`).join("") : `<tr><td class="pf-mut">No target above the current price yet${f.C && f.status!=="Breakout"?"; projections appear once price turns up from the pullback low":""}.</td><td></td></tr>`}</tbody></table></div></div>`;
 }
+function screenerBlock(p, tf){
+  const m = SCR._m; if (!m || !p.sg) return "";
+  const sig = p.sg[tf] || {}, by = m._by;
+  const groups = {};
+  Object.entries(sig).forEach(([id,v])=>{ const x = by[id]; if (!x) return; (groups[x.g] ??= []).push(SCR.label(m, {id, tf}, v).replace(/^[DW]: /,"")); });
+  const r = {zd:(p.z.d||{}).zone, zw:(p.z.w||{}).zone, bucket:(p.su||{}).bucket, rs:p.rs, q:(p.sq||{}).w, price:p.px, liquid:p.liq,
+             es:(p.su||{}).earn_soon, sector:p.sec, sig:p.sg};
+  const saved = (WL.get().screens || []).filter(s=>SCR.hits(s, {...r, liquid:true}, m));
+  const presets = (m.presets || []).filter(s=>SCR.hits(s, {...r, liquid:true}, m));
+  const g = Object.entries(groups);
+  return `<div class="pf-sec"><h3>Screener signals (${tf==="w"?"weekly":"daily"})</h3>
+    ${g.length ? `<div class="pf-kv" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">${g.map(([k,v])=>`<div style="display:block"><span>${esc(k)}</span><b style="display:block;font-weight:500;font-size:.84rem">${v.map(esc).join("<br>")}</b></div>`).join("")}</div>` : '<p class="pf-mut">No screener conditions met on this timeframe.</p>'}
+    <p style="font-size:.85rem;margin:10px 0 0"><span class="pf-mut">Your saved screens:</span> ${saved.length ? saved.map(s=>`<a href="screener.html#screen=${encodeURIComponent(s.name)}" style="color:var(--p-link)">${esc(s.name)}</a>`).join(", ") : '<span class="pf-mut">none matched</span>'}</p>
+    <p style="font-size:.85rem;margin:4px 0 0"><span class="pf-mut">Ready-made screens:</span> ${presets.length ? presets.map(s=>esc(s.name)).join(", ") : '<span class="pf-mut">none matched</span>'}</p></div>`;
+}
 function renderMonthly(p, s){
   const m = p.m;
   const body = !m || !m.c || m.c.length < 2 ? '<p class="pf-mut">Not enough monthly history.</p>' : (()=>{
@@ -290,7 +341,7 @@ function render(){
   ${setupStrip(p.su)}
   ${tf==="m" ? renderMonthly(p, s) : `  ${tf==="w" && IDX && IDX.partial ? `<p class="pf-mut" style="font-size:.8rem;margin:0 0 10px">This week is still forming (prices up to ${dl(IDX.asof)}), so the weekly zone can change until Friday's close.</p>` : ""}
   <div class="pf-cards">
-    <div class="pf-card"><h3>Technical zone</h3><div>${zchip(z.zone)}</div><small>${sinceTxt}</small>${z.prev?`<small>came from ${esc(z.prev)}</small>`:""}</div>
+    <div class="pf-card"><h3>Technical zone</h3><div>${zchip(z.zone)}</div><small>${sinceTxt}</small>${z.prev?`<small>came from ${esc(z.prev)}</small>`:""}${z.div?`<small style="color:var(--pz-div)">${esc(z.div.kind)} divergence: high ₹${fmt(z.div.p1,2)} (${dl(z.div.d1)}, RSI ${fmt(z.div.r1,0)}) → higher high ₹${fmt(z.div.p2,2)} (${dl(z.div.d2)}, RSI ${fmt(z.div.r2,0)})</small>`:""}</div>
     <div class="pf-card"><h3>Since entering the zone</h3><div class="big">${pct(z.move)}</div><small>entry ₹${fmt(z.entry,2)} → now ₹${fmt(p.px,2)}</small>${cur&&cur[6]!=null?`<small>best ${pct(cur[6])} · worst ${pct(cur[7])}</small>`:""}</div>
     <div class="pf-card"><h3>Sector rotation</h3><div>${qchip(p.sq&&p.sq[tf])}</div><small>${esc(p.sec)} vs NIFTY 50</small><div style="margin-top:6px">${qchip(p.rq&&p.rq[tf])}</div><small>this stock vs its sector</small></div>
     <div class="pf-card"><h3>Levels</h3><div>${sig.length ? sig.map(x=>`<span class="pchip" style="--c:var(${LS[x]})">${esc(x)}</span>`).join(" ") : '<span class="pf-mut">No signal</span>'}</div>
@@ -298,7 +349,7 @@ function render(){
   </div>
 
   <div class="pf-sec"><h3>Price and zone history</h3>${chart(z, lv, dates, tf, (p.fib||{})[tf])}
-    <div class="pf-key">${["Bullish","Overbought","Danger zone","Bearish","Oversold","Accumulation","Neutral"].map(k=>`<span><i style="--c:var(${ZC[k]})"></i>${k}</span>`).join("")}</div></div>
+    <div class="pf-key">${["Bullish","Strong momentum","Extended","Divergence zone","Bearish","Oversold","Accumulation","Neutral"].map(k=>`<span><i style="--c:var(${ZC[k]})"></i>${k}</span>`).join("")}</div></div>
 
   ${fibBlock((p.fib||{})[tf], tf, p.px)}
 
@@ -317,6 +368,8 @@ function render(){
     <div><span>Rising trendline</span><b>${lv.tls?`₹${fmt(lv.tls.v,2)} · ${lv.tls.t} touches`:"–"}</b></div>
     ${lv.brk?`<div><span>Broke out at</span><b>₹${fmt(lv.brk.p,2)}${lv.brk.vx?` · ${fmt(lv.brk.vx)}× vol`:""}</b></div>`:""}
   </div></div>
+
+  ${screenerBlock(p, tf)}
 
   <div class="pf-sec"><h3>Snapshot</h3><div class="pf-kv">
     <div><span>RSI</span><b>${fmt(z.rsi,0)}</b></div><div><span>ADX</span><b>${fmt(z.adx,0)}</b></div>
@@ -367,6 +420,23 @@ document.addEventListener("keydown", e => {
 });
 mountSearch();
 mountRegime();
+(function addScreenerLink(){
+  const nav = document.querySelector("header nav"); if (!nav || nav.querySelector('a[href="screener.html"]')) return;
+  const a = document.createElement("a"); a.href = "screener.html"; a.textContent = "Screener";
+  if (getComputedStyle(nav).display) a.style.cssText = nav.querySelector("a") ? nav.querySelector("a").style.cssText : "";
+  const after = nav.querySelector('a[href="setups.html"]') || nav.lastElementChild;
+  after ? after.insertAdjacentElement("afterend", a) : nav.appendChild(a);
+})();
+(function pwa(){
+  const add = (tag, attrs) => { const el = document.createElement(tag); Object.entries(attrs).forEach(([k,v])=>el.setAttribute(k,v)); document.head.appendChild(el); };
+  if (!document.querySelector('link[rel="manifest"]')) add("link", {rel:"manifest", href:"manifest.webmanifest"});
+  add("link", {rel:"apple-touch-icon", href:"icon-192.png"});
+  add("meta", {name:"apple-mobile-web-app-capable", content:"yes"});
+  add("meta", {name:"mobile-web-app-capable", content:"yes"});
+  add("meta", {name:"apple-mobile-web-app-title", content:"AZH Stocks"});
+  add("meta", {name:"theme-color", content:"#16243A"});
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
+})();
 const h = decodeURIComponent((location.hash.match(/^#stock=(.+)$/)||[])[1]||""); if (h) openProfile(h);
 })();
 """

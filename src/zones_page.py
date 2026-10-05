@@ -30,16 +30,16 @@ TEMPLATE = r"""<!doctype html>
 <style>
 :root{
   --bg:#EEF2F6; --panel:#FFFFFF; --ink:#16243A; --muted:#5C6B80; --line:#D3DBE5; --up:#1E8F5A; --down:#C2453B; --focus:#2F62C8;
-  --z-bear:#C2453B; --z-os:#6B4BB8; --z-acc:#2F62C8; --z-bull:#1E8F5A; --z-ob:#C9780F; --z-dang:#A8285E; --z-neu:#A3AFBF; --z-na:#E1E6ED;
+  --z-bear:#C2453B; --z-os:#6B4BB8; --z-acc:#2F62C8; --z-bull:#1E8F5A; --z-ob:#13857A; --z-dang:#0B6B4B; --z-div:#A8285E; --z-neu:#A3AFBF; --z-na:#E1E6ED;
   --font:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
 }
 @media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
   --bg:#111925; --panel:#18222F; --ink:#E5EBF3; --muted:#93A1B4; --line:#2A3646; --up:#3FBF85; --down:#E9675C; --focus:#6E97F0;
-  --z-bear:#E9675C; --z-os:#9C82E6; --z-acc:#6E97F0; --z-bull:#3FBF85; --z-ob:#E5A040; --z-dang:#E0619A; --z-neu:#5E6B7C; --z-na:#263140;}}
+  --z-bear:#E9675C; --z-os:#9C82E6; --z-acc:#6E97F0; --z-bull:#3FBF85; --z-ob:#3BB8AA; --z-dang:#5CC79A; --z-div:#E0619A; --z-neu:#5E6B7C; --z-na:#263140;}}
 :root[data-theme="dark"]{
   --bg:#111925; --panel:#18222F; --ink:#E5EBF3; --muted:#93A1B4; --line:#2A3646; --up:#3FBF85; --down:#E9675C; --focus:#6E97F0;
-  --z-bear:#E9675C; --z-os:#9C82E6; --z-acc:#6E97F0; --z-bull:#3FBF85; --z-ob:#E5A040; --z-dang:#E0619A; --z-neu:#5E6B7C; --z-na:#263140;}
+  --z-bear:#E9675C; --z-os:#9C82E6; --z-acc:#6E97F0; --z-bull:#3FBF85; --z-ob:#3BB8AA; --z-dang:#5CC79A; --z-div:#E0619A; --z-neu:#5E6B7C; --z-na:#263140;}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *,*::before,*::after{box-sizing:inherit}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 var(--font);font-variant-numeric:tabular-nums;-webkit-text-size-adjust:100%}
@@ -56,7 +56,7 @@ h2{font-size:1.1rem;margin:0 0 4px;font-weight:600}
 
 /* the cycle: six zones in market order, bearish back round to danger */
 .cycle{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;margin:0 0 16px;border-radius:14px;overflow:hidden;border:1px solid var(--line)}
-@media(min-width:760px){.cycle{grid-template-columns:repeat(6,minmax(0,1fr))}}
+@media(min-width:760px){.cycle{grid-template-columns:repeat(7,minmax(0,1fr))}}
 .z{position:relative;border:0;text-align:left;font:inherit;color:#fff;padding:12px 12px 14px;cursor:pointer;background:var(--c);min-height:108px;
    display:flex;flex-direction:column;justify-content:space-between}
 .z .n{font-size:1.8rem;font-weight:700;line-height:1}
@@ -179,9 +179,9 @@ button.tv{background:transparent;font-family:inherit;line-height:inherit;cursor:
 
 <script>
 const D = __DATA__;
-const ORDER = ["Bearish","Oversold","Accumulation","Bullish","Overbought","Danger zone"];
-const ZC = {"Bearish":"--z-bear","Oversold":"--z-os","Accumulation":"--z-acc","Bullish":"--z-bull","Overbought":"--z-ob","Danger zone":"--z-dang","Neutral":"--z-neu","No data":"--z-na"};
-const CODE = {R:"Bearish",O:"Oversold",A:"Accumulation",U:"Bullish",B:"Overbought",D:"Danger zone",N:"Neutral","-":"No data"};
+const ORDER = ["Bearish","Oversold","Accumulation","Bullish","Strong momentum","Extended","Divergence zone"];
+const ZC = {"Bearish":"--z-bear","Oversold":"--z-os","Accumulation":"--z-acc","Bullish":"--z-bull","Strong momentum":"--z-ob","Extended":"--z-dang","Divergence zone":"--z-div","Neutral":"--z-neu","No data":"--z-na"};
+const CODE = {R:"Bearish",O:"Oversold",A:"Accumulation",U:"Bullish",B:"Strong momentum",D:"Extended",V:"Divergence zone",N:"Neutral","-":"No data"};
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const zc = z => `var(${ZC[z]||"--z-neu"})`;
 const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -220,11 +220,12 @@ function setSub(){
 const entered = s => s.since && sessIdx[s.since]!=null && sessIdx[s.since] < period && ORDER.includes(s.zone);
 function drawRules(){
   const T = D.th, p = P, ma = tf==="d" ? `${p.ma}-day` : `${p.ma}-week`;
-  document.getElementById("rules").innerHTML = `<p class="sub" style="margin-top:10px">${p.label} rules, checked in this order on each closing bar: oversold, danger zone, overbought, bullish, bearish, accumulation. The first match wins. Bullish, bearish and accumulation must hold for ${unitsN(p.confirm)} before a move counts. Oversold, overbought and danger zone start and end on the bar their condition is met or lost.${tf==="w"?" The current week is included while it is still forming: its bar uses the latest daily close, so a stock can enter or leave a weekly zone mid-week. The week is final after Friday's close.":""}</p>
+  document.getElementById("rules").innerHTML = `<p class="sub" style="margin-top:10px">${p.label} rules, checked in this order on each closing bar: oversold, divergence zone, extended, strong momentum, bullish, bearish, accumulation. The first match wins. Bullish, bearish and accumulation must hold for ${unitsN(p.confirm)} before a move counts. Oversold, divergence, extended and strong momentum start and end on the bar their condition is met or lost.${tf==="w"?" The current week is included while it is still forming: its bar uses the latest daily close, so a stock can enter or leave a weekly zone mid-week. The week is final after Friday's close.":""}</p>
   <dl>
     <dt>Oversold</dt><dd>RSI(14) at or below ${T.os}.</dd>
-    <dt>Danger zone</dt><dd>A stretched uptrend that is risky to chase. Price has been above the Ichimoku cloud on at least ${p.trend_bars} of the last ${p.trend_window} ${p.units}, RSI is still ${p.rsi_floor} or higher, and either RSI was at or above ${T.ob} on at least ${p.ob_bars} of the last ${p.ob_window} ${p.units} or price is ${p.stretch}% or more above its ${ma} average. It leaves this zone once RSI cools below ${p.rsi_floor} or the stretch unwinds.</dd>
-    <dt>Overbought</dt><dd>RSI(14) at or above ${T.ob}, but not yet stretched enough for the danger zone. Often the first leg of a strong move.</dd>
+    <dt>Divergence zone</dt><dd>A warning inside an uptrend. Price made a higher swing high but RSI or MACD made a lower high, so momentum is fading. The earlier peak must have had RSI of ${p.div_rsi_min} or more. Swing highs up to ${p.div_window} ${p.units} apart are compared; the zone starts ${unitsN(p.div_pivot)} after the second high (when that high is confirmed) and lasts up to ${unitsN(p.div_active)}, or until price makes a new high with RSI back above the earlier peak.</dd>
+    <dt>Extended</dt><dd>A long-running, stretched uptrend. Price has been above the Ichimoku cloud on at least ${p.trend_bars} of the last ${p.trend_window} ${p.units}, RSI is still ${p.rsi_floor} or higher, and either RSI was at or above ${T.ob} on at least ${p.ob_bars} of the last ${p.ob_window} ${p.units} or price is ${p.stretch}% or more above its ${ma} average. Strong, but further from support, so stops are wider.</dd>
+    <dt>Strong momentum</dt><dd>RSI(14) at or above ${T.ob}, but not yet extended. Often the first leg of a strong move.</dd>
     <dt>Bullish</dt><dd>Price above the cloud, Tenkan at or above Kijun, MACD above signal, ADX at or above ${T.adx} with +DI leading, Choppiness under ${T.cht} (trending), RSI between 50 and ${T.ob}.</dd>
     <dt>Bearish</dt><dd>Price below the cloud, MACD under signal, ADX at or above ${T.adx} with −DI leading, RSI between ${T.os} and 50.</dd>
     <dt>Accumulation</dt><dd>A sideways base: Choppiness at or above ${T.chr} or ADX under ${T.adx}, RSI between 40 and 60, MACD histogram higher than ${unitsN(p.hist_rise_bars)} ago, and price inside or close to the cloud.</dd>
@@ -312,7 +313,7 @@ function drawTable(){
     switch(k){
       case "sym": return `<td class="name"><button class="psym" data-p="${esc(s.sym)}">${esc(s.sym)}</button>${tvLink(s.sym, tf==="w"?"W":"D")}<small>${esc(s.sector)}</small></td>`;
       case "price": return `<td>${fmt(s.price,2)}</td>`;
-      case "zone": return `<td class="l">${chip(s.zone)}${s.new?' <small class="mut">new</small>':''}</td>`;
+      case "zone": return `<td class="l">${chip(s.zone)}${s.new?' <small class="mut">new</small>':''}${s.div?`<small class="mut" style="display:block">${esc(s.div.kind)} lower high</small>`:''}</td>`;
       case "since": return `<td class="l">${s.capped ? `<span class="mut">before ${dlabel(D.tf[tf].lb_start)}</span>` : dlabel(s.since)}</td>`;
       case "days": return `<td>${s.capped ? P.lookback+"+" : s.days}</td>`;
       case "entry": return `<td>${fmt(s.entry,2)}</td>`;

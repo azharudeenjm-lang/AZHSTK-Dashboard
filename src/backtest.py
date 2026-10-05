@@ -1,14 +1,15 @@
 """Weekly backtest of the zone rotation strategy.
 
 Entry   the week a stock moves Accumulation -> Bullish (buy at that close)
-Hold    while it stays in Bullish, Overbought or Danger zone
-Exit    "cooling": the week it leaves Danger zone (any direction)
+Hold    while it stays in Bullish, Strong momentum or Extended
+Exit    "cooling": the week it leaves Extended (any direction)
+        "divergence": the week it enters the Divergence zone
         "failure": it drops to Neutral, Bearish, Oversold or Accumulation
-                   before ever reaching Danger
-Variant "ob_exit": also exit if Overbought slips back to Bullish
-                   before Danger was reached
+                   before ever reaching Extended
+Variant "ob_exit": also exit if Strong momentum slips back to Bullish
+                   before Extended was reached
 
-Runs for every Danger-zone RSI floor in BACKTEST["floors"]. Only one open
+Runs for every Extended-zone RSI floor in BACKTEST["floors"]. Only one open
 trade per stock at a time. Liquidity is checked at the entry week, using the
 data available then, so today's liquid list does not leak into the past.
 """
@@ -22,7 +23,7 @@ from .config import BACKTEST, CACHE, ZONE_PARAMS
 from .zones import classify, indicators
 
 FAMILY = {"U", "B", "D"}
-NAMES = {"U": "Bullish", "B": "Overbought", "D": "Danger zone", "N": "Neutral",
+NAMES = {"U": "Bullish", "B": "Strong momentum", "D": "Extended", "V": "Divergence zone", "N": "Neutral",
          "R": "Bearish", "O": "Oversold", "A": "Accumulation", "-": "No data"}
 
 
@@ -82,12 +83,14 @@ def simulate(codes, close, liquid, bench, cost):
                     continue
                 pos["hi"] = max(pos["hi"], c[i]) if c[i] == c[i] else pos["hi"]
                 zi, reason = z[i], None
-                if pos["hiD"] and zi != "D":
-                    reason = "Cooled from Danger"
+                if zi == "V":
+                    reason = "Divergence"
+                elif pos["hiD"] and zi != "D":
+                    reason = "Cooled from Extended"
                 elif zi not in FAMILY:
                     reason = "Left uptrend to " + NAMES.get(zi, zi)
                 elif variant == "ob_exit" and pos["peak"] == "B" and zi == "U":
-                    reason = "Overbought fell back"
+                    reason = "Momentum fell back"
                 if zi == "D":
                     pos["hiD"] = True
                 if zi in ("B", "D") and pos["peak"] != "D":
@@ -127,7 +130,7 @@ def summarise(tr):
     for x in closed:
         reasons[x["why"]] = reasons.get(x["why"], 0) + 1
     peaks = {}
-    for p in ("Bullish", "Overbought", "Danger zone"):
+    for p in ("Bullish", "Strong momentum", "Extended"):
         sub = np.array([x["ret"] for x in closed if x["peak"] == p])
         peaks[p] = {"n": int(len(sub)), "avg": round(float(sub.mean()), 2) if len(sub) else None,
                     "win": round(float((sub > 0).mean() * 100), 1) if len(sub) else None}
@@ -140,7 +143,7 @@ def summarise(tr):
         "wk": round(float(np.mean([x["wk"] for x in closed])), 1),
         "edge": round(float(np.mean(edge)), 2) if edge else None,
         "best": round(float(r.max()), 1), "worst": round(float(r.min()), 1),
-        "danger": round(float(np.mean([x["peak"] == "Danger zone" for x in closed]) * 100), 1),
+        "danger": round(float(np.mean([x["peak"] == "Extended" for x in closed]) * 100), 1),
         "reasons": reasons, "peaks": peaks,
     }
 
@@ -179,7 +182,7 @@ def run(wk, universe, benchmark):
     variants, trades_all = [], {}
     for floor in BACKTEST["floors"]:
         p = deepcopy(ZONE_PARAMS["w"]); p["rsi_floor"] = floor
-        codes, _ = classify(c, ind, p)
+        codes = classify(c, ind, p)[0]
         tr = simulate(codes, c, liquid, bench, BACKTEST["cost_pct"])
         for x in tr:
             x["sym"] = x["t"][:-3]; x["sec"] = sec.get(x["t"]); x["fl"] = floor

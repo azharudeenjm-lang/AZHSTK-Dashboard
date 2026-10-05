@@ -31,18 +31,18 @@ TEMPLATE = r"""<!doctype html>
 :root{
   --bg:#EEF2F6; --panel:#FFFFFF; --ink:#16243A; --muted:#5C6B80; --line:#D3DBE5; --up:#1E8F5A; --down:#C2453B; --focus:#2F62C8;
   --s-brk:#1E8F5A; --s-tlb:#13857A; --s-ret:#2F62C8; --s-tls:#6B4BB8; --s-fib:#8A5A12; --s-ns:#4F7C5F; --s-bd:#C2453B; --s-tbd:#A8285E; --s-nr:#C9780F;
-  --z-bear:#C2453B; --z-os:#6B4BB8; --z-acc:#2F62C8; --z-bull:#1E8F5A; --z-ob:#C9780F; --z-dang:#A8285E; --z-neu:#A3AFBF;
+  --z-bear:#C2453B; --z-os:#6B4BB8; --z-acc:#2F62C8; --z-bull:#1E8F5A; --z-ob:#13857A; --z-dang:#0B6B4B; --z-div:#A8285E; --z-neu:#A3AFBF;
   --font:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
 }
 @media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
   --bg:#111925; --panel:#18222F; --ink:#E5EBF3; --muted:#93A1B4; --line:#2A3646; --up:#3FBF85; --down:#E9675C; --focus:#6E97F0;
   --s-brk:#3FBF85; --s-tlb:#3BB8AA; --s-ret:#6E97F0; --s-tls:#9C82E6; --s-fib:#D4A049; --s-ns:#7FB08F; --s-bd:#E9675C; --s-tbd:#E0619A; --s-nr:#E5A040;
-  --z-bear:#E9675C; --z-os:#9C82E6; --z-acc:#6E97F0; --z-bull:#3FBF85; --z-ob:#E5A040; --z-dang:#E0619A; --z-neu:#5E6B7C;}}
+  --z-bear:#E9675C; --z-os:#9C82E6; --z-acc:#6E97F0; --z-bull:#3FBF85; --z-ob:#3BB8AA; --z-dang:#5CC79A; --z-div:#E0619A; --z-neu:#5E6B7C;}}
 :root[data-theme="dark"]{
   --bg:#111925; --panel:#18222F; --ink:#E5EBF3; --muted:#93A1B4; --line:#2A3646; --up:#3FBF85; --down:#E9675C; --focus:#6E97F0;
   --s-brk:#3FBF85; --s-tlb:#3BB8AA; --s-ret:#6E97F0; --s-tls:#9C82E6; --s-fib:#D4A049; --s-ns:#7FB08F; --s-bd:#E9675C; --s-tbd:#E0619A; --s-nr:#E5A040;
-  --z-bear:#E9675C; --z-os:#9C82E6; --z-acc:#6E97F0; --z-bull:#3FBF85; --z-ob:#E5A040; --z-dang:#E0619A; --z-neu:#5E6B7C;}
+  --z-bear:#E9675C; --z-os:#9C82E6; --z-acc:#6E97F0; --z-bull:#3FBF85; --z-ob:#3BB8AA; --z-dang:#5CC79A; --z-div:#E0619A; --z-neu:#5E6B7C;}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *,*::before,*::after{box-sizing:inherit}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 var(--font);font-variant-numeric:tabular-nums;-webkit-text-size-adjust:100%}
@@ -150,8 +150,8 @@ const BULL = ["Breakout","Trendline breakout","Retest","At trendline support","A
 const BEAR = ["Breakdown","Trendline breakdown","Near resistance"];
 const SC = {"Breakout":"--s-brk","Trendline breakout":"--s-tlb","Retest":"--s-ret","At trendline support":"--s-tls","At Fibonacci support":"--s-fib","Near support":"--s-ns","Breakdown":"--s-bd","Trendline breakdown":"--s-tbd","Near resistance":"--s-nr"};
 const SDESC = {"Breakout":"closed above tested resistance","Trendline breakout":"closed above a falling line","Retest":"pulled back to a broken level","At trendline support":"resting on a rising line","At Fibonacci support":"pulled back into the 50–61.8% zone","Near support":"just above a support level","Breakdown":"closed below tested support","Trendline breakdown":"closed below a rising line","Near resistance":"just under a resistance level"};
-const ZORDER = ["Bearish","Oversold","Accumulation","Bullish","Overbought","Danger zone","Neutral"];
-const ZC = {"Bearish":"--z-bear","Oversold":"--z-os","Accumulation":"--z-acc","Bullish":"--z-bull","Overbought":"--z-ob","Danger zone":"--z-dang","Neutral":"--z-neu"};
+const ZORDER = ["Bearish","Oversold","Accumulation","Bullish","Strong momentum","Extended","Divergence zone","Neutral"];
+const ZC = {"Bearish":"--z-bear","Oversold":"--z-os","Accumulation":"--z-acc","Bullish":"--z-bull","Strong momentum":"--z-ob","Extended":"--z-dang","Divergence zone":"--z-div","Neutral":"--z-neu"};
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmt = (v,d=1) => v==null ? "–" : Number(v).toLocaleString("en-IN",{minimumFractionDigits:d,maximumFractionDigits:d});

@@ -40,5 +40,7 @@ def make_demo(benchmark, n_per=40, days=1250, seed=7):
     low = close * (1 - np.abs(rng.normal(0, 0.008, close.shape)))
     news = {s: [{"t": f"Sample headline about {s.lower()} stocks", "u": "https://news.google.com",
                  "s": "Demo", "d": "02 Oct"}] for s in SECTORS}
-    px = {"Close": close, "High": high, "Low": low, "Volume": volume}
+    opn = close.shift(1) * (1 + rng.normal(0, 0.004, close.shape))
+    opn = opn.fillna(close).clip(lower=low, upper=high)
+    px = {"Close": close, "High": high, "Low": low, "Volume": volume, "Open": opn}
     return pd.DataFrame(rows), px, pd.DataFrame(fund), news, {}

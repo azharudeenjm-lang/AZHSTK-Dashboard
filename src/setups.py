@@ -7,8 +7,8 @@ For every stock it answers six questions and sorts the stock into a bucket:
   2. Weekly setup    fresh trend (Accumulation -> Bullish recently), pullback
                      inside a Bullish trend (retest / support / trendline),
                      or a weekly breakout
-  3. Daily timing    not overheated today (daily Overbought / Danger / RSI 70+
-                     means wait), ideally at support or turning up
+  3. Daily timing    no daily divergence and not extended today (those mean
+                     wait), ideally at support, on a breakout or turning up
   4. Sector          sector Leading or Improving on the weekly RRG
   5. Room            reward to the next weekly resistance at least 2x the risk
   6. Stop            a sensible stop exists within 1.5%-15% below the price
@@ -17,7 +17,7 @@ For every stock it answers six questions and sorts the stock into a bucket:
   Setting up   weekly setup with monthly OK or mixed, but daily says wait
                (or the sector is lagging, or the monthly is only mixed)
   Watchlist    monthly OK and a weekly base (Accumulation) is forming
-  Avoid        weekly Danger zone / Bearish / Oversold, or a weekly setup
+  Avoid        weekly Divergence zone / Bearish / Oversold, or a weekly setup
                fighting a weak monthly trend
 """
 import numpy as np
@@ -108,7 +108,7 @@ def build(px, universe, zd, zw, ld, lw, sectors, rs=None, regime=None, earn=None
         setup, wk_txt = None, ""
         if wz == "Bullish" and wprev == "Accumulation" and not Zw.get("capped") and wdays <= SETUP["fresh_weeks"]:
             setup, wk_txt = "Fresh trend", f"Accumulation → Bullish {wdays} {'week' if wdays == 1 else 'weeks'} ago"
-        elif sig_w & BREAKOUT and wz in ("Bullish", "Accumulation", "Overbought", "Neutral"):
+        elif sig_w & BREAKOUT and wz in ("Bullish", "Accumulation", "Strong momentum", "Neutral"):
             b = sorted(sig_w & BREAKOUT)[0]
             vx = (Lw.get("brk") or {}).get("vx") or (Lw.get("tlr") or {}).get("vx")
             setup, wk_txt = "Breakout", f"weekly {b.lower()}" + (f", {vx:.1f}× volume" if vx else "")
@@ -118,20 +118,24 @@ def build(px, universe, zd, zw, ld, lw, sectors, rs=None, regime=None, earn=None
             if fs in ("Golden pocket", "38–50%"):
                 bits.append(f"fib {fs.lower()}")
             setup, wk_txt = "Pullback", "Bullish, " + ", ".join(bits)
-        elif wz == "Bullish":
-            setup, wk_txt = "In trend", f"Bullish for {wdays} weeks, no pullback yet"
+        elif wz == "Strong momentum" and not Zw.get("capped") and wdays <= SETUP["fresh_weeks"]:
+            setup, wk_txt = "Momentum", f"strong momentum for {wdays} {'week' if wdays == 1 else 'weeks'}"
+        elif wz in ("Bullish", "Strong momentum", "Extended"):
+            setup, wk_txt = "In trend", f"{wz} for {wdays} weeks, no pullback yet"
         elif wz == "Accumulation":
             setup, wk_txt = "Base", f"Accumulation for {wdays} weeks"
         else:
             wk_txt = f"weekly {wz or 'no data'}"
-        wk_ok = setup in ("Fresh trend", "Breakout", "Pullback")
-        wk_bad = wz in ("Danger zone", "Bearish", "Oversold")
+        wk_ok = setup in ("Fresh trend", "Breakout", "Pullback", "Momentum")
+        wk_bad = wz in ("Divergence zone", "Bearish", "Oversold")
 
         # ---- 3. daily ripple ----
         dz, rd = Zd.get("zone"), rsi_d.get(t)
         trig = bool(pd.notna(prev_wk_high.get(t)) and price > prev_wk_high[t])
-        if dz in ("Overbought", "Danger zone") or (pd.notna(rd) and rd >= SETUP["daily_rsi_hot"]):
-            day, day_txt = "Wait", f"daily {dz.lower() if dz in ('Overbought','Danger zone') else 'RSI ' + format(rd, '.0f')}: wait for a dip"
+        if dz == "Divergence zone":
+            day, day_txt = "Wait", "daily divergence: momentum fading, wait"
+        elif dz == "Extended" or (pd.notna(rd) and rd >= 80):
+            day, day_txt = "Wait", f"daily {'extended' if dz == 'Extended' else 'RSI ' + format(rd, '.0f')}: wait for a dip"
         elif dz in ("Bearish",) or sig_d & {"Breakdown", "Trendline breakdown"}:
             day, day_txt = "Weak", "daily " + (dz.lower() if dz == "Bearish" else ", ".join(sorted(sig_d & {"Breakdown", "Trendline breakdown"})).lower())
         elif dz == "Oversold":
@@ -143,8 +147,8 @@ def build(px, universe, zd, zw, ld, lw, sectors, rs=None, regime=None, earn=None
             if not bits:
                 bits.append("daily base, turning up")
             day, day_txt = "Good", ", ".join(bits)
-        elif dz == "Bullish":
-            day, day_txt = "Neutral", "daily bullish, no fresh trigger yet"
+        elif dz in ("Bullish", "Strong momentum"):
+            day, day_txt = "Neutral", f"daily {dz.lower()}, no fresh trigger yet"
         else:
             day, day_txt = "Neutral", f"daily {(dz or 'no data').lower()}"
 

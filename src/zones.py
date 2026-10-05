@@ -6,11 +6,15 @@ zone comes straight from price history; nothing needs to be stored.
 
 Rules, checked in order (first match wins). Bar counts come from
 ZONE_PARAMS in config.py and differ between daily and weekly:
-  Oversold      RSI <= 30
-  Danger zone   stretched uptrend: above the cloud on most recent bars,
-                RSI still >= floor, and EITHER RSI was >= 70 on many recent
-                bars OR price is far above its moving average
-  Overbought    RSI >= 70 (fresh, not yet stretched)
+  Oversold         RSI <= 30
+  Divergence zone  bearish divergence: price made a higher swing high but RSI
+                   or MACD made a lower high (first peak had RSI 60+). Stays on
+                   for up to div_active bars, or until price makes a new high
+                   with RSI back above the earlier peak
+  Extended         long-running, stretched uptrend: above the cloud on most
+                   recent bars, RSI still >= floor, and EITHER RSI was >= 70 on
+                   many recent bars OR price is far above its moving average
+  Strong momentum  RSI >= 70 (fresh strength, not yet extended)
   Bullish       above cloud, Tenkan >= Kijun, MACD > signal, ADX >= 20 with
                 +DI leading, Choppiness < 61.8, RSI 50-70
   Bearish       below cloud, MACD < signal, ADX >= 20 with -DI leading, RSI 30-50
@@ -24,10 +28,10 @@ import pandas as pd
 from .config import (ADX_TREND, CHOP_RANGE, CHOP_TRENDING, RSI_OVERBOUGHT,
                      RSI_OVERSOLD, WEEKLY_LIVE, ZONE_PARAMS)
 
-CODE = {"Oversold": "O", "Overbought": "B", "Danger zone": "D", "Bullish": "U",
-        "Bearish": "R", "Accumulation": "A", "Neutral": "N", "No data": "-"}
+CODE = {"Oversold": "O", "Strong momentum": "B", "Extended": "D", "Divergence zone": "V",
+        "Bullish": "U", "Bearish": "R", "Accumulation": "A", "Neutral": "N", "No data": "-"}
 NAME = {v: k for k, v in CODE.items()}
-INSTANT = {"O", "B", "D"}  # these start and end on the bar their condition flips
+INSTANT = {"O", "B", "D", "V"}  # these start and end on the bar their condition flips
 
 
 # ---------- bars ----------
@@ -83,8 +87,45 @@ def indicators(c, h, l):
                 ctop=np.maximum(span_a, span_b), cbot=np.minimum(span_a, span_b))
 
 
+def divergence(c, rsi, macd, p):
+    """Bearish divergence on closing swing highs. Returns (bool frame, details).
+
+    A swing high is the highest close of `div_pivot` bars on each side, so it
+    is only known `div_pivot` bars later; the zone starts then, never earlier.
+    """
+    k, win, act, rmin = p["div_pivot"], p["div_window"], p["div_active"], p["div_rsi_min"]
+    piv = (c == c.rolling(2 * k + 1, center=True).max()) & c.notna()
+    on = np.zeros(c.shape, dtype=bool)
+    info = {}
+    R, M, C = rsi.to_numpy(float), macd.to_numpy(float), c.to_numpy(float)
+    n = len(c)
+    for j, col in enumerate(c.columns):
+        ps = np.flatnonzero(piv[col].to_numpy())
+        last = None
+        for a, b in zip(ps[:-1], ps[1:]):
+            if b - a > win or not C[b, j] > C[a, j] or not R[a, j] >= rmin:
+                continue
+            r_div = R[b, j] < R[a, j] - 2          # RSI peak at least 2 points lower
+            m_div = M[a, j] > 0 and M[b, j] < M[a, j]
+            if not (r_div or m_div):
+                continue
+            start, stop = b + k, min(b + k + act, n)
+            for t in range(start, stop):
+                if C[t, j] > C[b, j] and R[t, j] > R[a, j]:   # momentum is back: cancel
+                    break
+                on[t, j] = True
+            last = (a, b, r_div, m_div)
+        if last:
+            a, b, r_div, m_div = last
+            info[col] = {"kind": "RSI + MACD" if r_div and m_div else "RSI" if r_div else "MACD",
+                         "d1": c.index[a].strftime("%Y-%m-%d"), "d2": c.index[b].strftime("%Y-%m-%d"),
+                         "p1": round(float(C[a, j]), 2), "p2": round(float(C[b, j]), 2),
+                         "r1": round(float(R[a, j]), 1), "r2": round(float(R[b, j]), 1)}
+    return pd.DataFrame(on, index=c.index, columns=c.columns), info
+
+
 def classify(c, ind, p):
-    """Raw (unconfirmed) zone code for every bar/ticker."""
+    """Raw (unconfirmed) zone code for every bar/ticker. Returns (codes, stretch, divergence info)."""
     r, m, s, hst = ind["rsi"], ind["macd"], ind["signal"], ind["hist"]
     adx, pdi, mdi, chop = ind["adx"], ind["pdi"], ind["mdi"], ind["chop"]
     tk, kj, top, bot = ind["tenkan"], ind["kijun"], ind["ctop"], ind["cbot"]
@@ -96,8 +137,11 @@ def classify(c, ind, p):
     danger = ((trend >= p["trend_bars"]) & (r >= p["rsi_floor"])
               & ((ob >= p["ob_bars"]) | (stretch >= p["stretch"])))
 
+    div, dinfo = divergence(c, r, m, p)
+
     conds = [
         r <= RSI_OVERSOLD,
+        div,
         danger,
         r >= RSI_OVERBOUGHT,
         above & (tk >= kj) & (m > s) & (adx >= ADX_TREND) & (pdi > mdi)
@@ -107,9 +151,9 @@ def classify(c, ind, p):
               & (hst > hst.shift(p["hist_rise_bars"])) & (c >= bot * 0.97) & (c <= top * 1.05),
     ]
     raw = np.select([x.fillna(False).to_numpy(bool) for x in conds],
-                    ["O", "D", "B", "U", "R", "A"], default="N")
+                    ["O", "V", "D", "B", "U", "R", "A"], default="N")
     raw[(r.isna() | top.isna() | adx.isna()).to_numpy()] = "-"
-    return pd.DataFrame(raw, index=c.index, columns=c.columns), stretch
+    return pd.DataFrame(raw, index=c.index, columns=c.columns), stretch, dinfo
 
 
 def confirm(seq, need_bars):
@@ -172,7 +216,7 @@ def build_zones(close, high, low, tickers, tf="d", history=False):
     if tf == "w":
         c, h, l = weekly_bars(c, h, l)
     ind = indicators(c, h, l)
-    raw, stretch = classify(c, ind, p)
+    raw, stretch, dinfo = classify(c, ind, p)
     raw = raw.tail(p["lookback"])
     dates = raw.index
     last = {k: v.iloc[-1] for k, v in ind.items()}
@@ -206,6 +250,7 @@ def build_zones(close, high, low, tickers, tf="d", history=False):
             "adx": _r(last["adx"].get(t), 1), "pdi": _r(last["pdi"].get(t), 1),
             "mdi": _r(last["mdi"].get(t), 1), "chop": _r(last["chop"].get(t), 1),
             "cloud": cloud, "stretch": _r(ls.get(t), 1),
+            "div": dinfo.get(t) if z == "V" else None,
         }
         if history:
             hist[t] = {"segs": segments(sm, closes, dstr),

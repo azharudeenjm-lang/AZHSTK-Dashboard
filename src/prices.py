@@ -10,7 +10,7 @@ import pandas as pd
 
 from .config import CACHE, PRICE_HISTORY
 
-FIELDS = ["Close", "High", "Low", "Volume"]
+FIELDS = ["Close", "High", "Low", "Volume", "Open"]
 BATCH = 40          # tickers per request
 THREADS = 4         # parallel connections per batch
 TIMEOUT = 30        # seconds per request
