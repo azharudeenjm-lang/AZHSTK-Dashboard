@@ -5,3 +5,4 @@ curl_cffi>=0.15
 requests>=2.31
 feedparser>=6.0
 pyarrow>=14
+pillow>=10

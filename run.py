@@ -12,8 +12,8 @@ import time
 
 import pandas as pd
 
-from src import (analytics, backtest, backtest_page, dashboard, earnings, fib, levels, levels_page, profiles,
-                 setups, setups_page, strength, watchlist_page, zones, zones_page)
+from src import (analytics, backtest, backtest_page, dashboard, earnings, fib, levels, levels_page, profiles, pwa,
+                 screener_page, setups, setups_page, signals, strength, watchlist_page, zones, zones_page)
 import json
 from src.config import BENCHMARK, DOCS, NEWS_TOP_MOVERS
 
@@ -148,12 +148,29 @@ def main():
                           "price": s.get("price"), **su[t]})
     setups_page.render(clean({"stocks": srows, "regime": reg}))
     watchlist_page.render()
+    print("   screener")
+    sg = signals.build(px, tick, ld, lw, fibs)
+    secq = {x["sector"]: x.get("q_w") for x in sectors}
+    scr_rows = []
+    for s_ in stocks:
+        t = s_["sym"] + ".NS"
+        if t not in zd:
+            continue
+        u = su.get(t, {})
+        scr_rows.append({"sym": s_["sym"], "name": s_["name"], "sector": s_["sector"], "liquid": bool(s_["liquid"]),
+                         "price": s_.get("price"), "r1d": s_.get("r1d"), "r1m": s_.get("r1m"), "r3m": s_.get("r3m"),
+                         "rs": rs.get(t), "zd": zd[t]["zone"], "zw": (zw.get(t) or {}).get("zone"),
+                         "bucket": u.get("bucket"), "q": secq.get(s_["sector"]), "hi": s_.get("from_high"),
+                         "es": bool(u.get("earn_soon"))})
+    sg_sym = {tf: {t[:-3]: v for t, v in sg[tf].items()} for tf in ("d", "w")}
+    screener_page.render(clean(scr_rows), clean(sg_sym))
+    pwa.write()
     print("   stock profiles")
     gen = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%d %b %Y, %I:%M %p IST")
     profiles.write(clean(stocks), clean(sectors), clean({"d": zd, "w": zw}), clean({"d": hd, "w": hw}),
                    clean({"d": ld, "w": lw}), fmap, {"d": dates_d, "w": dates_w}, gen,
                    {"partial": partial, "asof": asof}, clean(su), clean(mon),
-                   extra={"rs": rs, "earn": earn, "fib": clean(fibs)})
+                   extra={"rs": rs, "earn": earn, "fib": clean(fibs), "sg": sg})
     zones_page.render(clean({"stocks": zrows,
                              "tf": {"d": {"dates": dates_d, "lb_start": lb_d},
                                     "w": {"dates": dates_w, "lb_start": lb_w,
