@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 
 from .config import SCREENER_EVENT_BARS as NB, WEEKLY_LIVE
+from . import lines
 
 # id, group, label, kind ("s" state / "e" event)
 META = [
@@ -88,6 +89,10 @@ META = [
     ("fib618", "Levels and Fibonacci", "Touched Fibonacci 61.8% and reversed up", "e"),
     ("fib_gp", "Levels and Fibonacci", "In the Fibonacci golden pocket (50–61.8%)", "s"),
 ]
+META += [(i, "Trend lines", l, k) for i, l, k in lines.TL_META]
+META += [(i, "Support and resistance", l, k) for i, l, k in lines.SR_META]
+META += [(i, "DeMark TD lines", l, k) for i, l, k in lines.TD_META]
+
 LVMAP = {"Breakout": "lv_brk", "Trendline breakout": "lv_tlb", "Retest": "lv_ret",
          "At trendline support": "lv_tls", "Near support": "lv_sup", "Near resistance": "lv_res",
          "Breakdown": "lv_bd"}
@@ -316,6 +321,9 @@ def build(px, tickers, ld, lw, fibs):
                             break
             if row:
                 out[t] = row
+        extra = lines.build_tf(o, h, l, c, tf)
+        for t, r in extra.items():
+            out.setdefault(t, {}).update(r)
         res[tf] = out
         print(f"  screener signals ({tf}): {len(out)} stocks")
     return res
