@@ -83,12 +83,20 @@ def _w(df, n):
     return df.ewm(alpha=1 / n, adjust=False, min_periods=n).mean()
 
 
+def _ok(v):
+    """True for a usable number (not missing, not infinite)."""
+    try:
+        return v is not None and np.isfinite(float(v))
+    except (TypeError, ValueError):
+        return False
+
+
 def _i10(v):
-    return None if v is None or pd.isna(v) else int(round(float(v) * 10))
+    return int(round(float(v) * 10)) if _ok(v) else None
 
 
 def _sig4(v):
-    return None if v is None or pd.isna(v) else float(f"{float(v):.4g}")
+    return float(f"{float(v):.4g}") if _ok(v) else None
 
 
 def _tail(df, t, f=_i10):
@@ -136,11 +144,11 @@ def build_tf(o, h, l, c, v, tf):
     adx = _w(100 * (pdi - mdi).abs() / (pdi + mdi).replace(0, np.nan), 14)
     macd = c.ewm(span=12, adjust=False).mean() - c.ewm(span=26, adjust=False).mean()
     msig = macd.ewm(span=9, adjust=False).mean()
-    av = v.rolling(20, min_periods=10).mean().shift()
+    av = v.rolling(20, min_periods=10).mean().shift().replace(0, np.nan)
     vx = (v / av) * np.sign(c.diff()).replace(0, 1)
-    gap = (l / h.shift() - 1) * 100
-    chg = {n: (c / c.shift(n) - 1) * 100 for n in CHG_N}
-    rng = {n: (h.rolling(n).max() / l.rolling(n).min() - 1) * 100 for n in RNG_N}
+    gap = (l / h.shift().replace(0, np.nan) - 1) * 100
+    chg = {n: (c / c.shift(n).replace(0, np.nan) - 1) * 100 for n in CHG_N}
+    rng = {n: (h.rolling(n).max() / l.rolling(n).min().replace(0, np.nan) - 1) * 100 for n in RNG_N}
     hi52 = (1 - c / h.rolling(52 * per, min_periods=int(52 * per * 0.8)).max()) * 100
     sma = {p: c.rolling(p, min_periods=p).mean() for p in MA_P}
     ema = {p: c.ewm(span=p, adjust=False, min_periods=p).mean() for p in MA_P}
