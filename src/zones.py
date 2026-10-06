@@ -31,7 +31,8 @@ from .config import (ADX_TREND, CHOP_RANGE, CHOP_TRENDING, RSI_OVERBOUGHT,
 CODE = {"Oversold": "O", "Strong momentum": "B", "Extended": "D", "Divergence zone": "V",
         "Bullish": "U", "Bearish": "R", "Accumulation": "A", "Neutral": "N", "No data": "-"}
 NAME = {v: k for k, v in CODE.items()}
-INSTANT = {"O", "B", "D", "V"}  # these start and end on the bar their condition flips
+INSTANT = {"O", "B", "D", "V"}
+LOG_KEEP = 8   # past zone visits kept per stock for the "moved on" view
 
 
 # ---------- bars ----------
@@ -204,7 +205,7 @@ def segments(sm, closes, dates):
     return out
 
 
-def build_zones(close, high, low, tickers, tf="d", history=False):
+def build_zones(close, high, low, tickers, tf="d", history=False, opens=None):
     """Returns ({ticker: zone dict}, bar dates, lookback start date[, history]).
 
     With history=True also returns {ticker: {"segs": [...], "c": [closes]}}
@@ -222,6 +223,13 @@ def build_zones(close, high, low, tickers, tf="d", history=False):
     last = {k: v.iloc[-1] for k, v in ind.items()}
     lc, ls = c.iloc[-1], stretch.iloc[-1]
     ctail = c.reindex(dates)
+    htail, ltail = h.reindex(dates), l.reindex(dates)
+    otail = None
+    if history and opens is not None:
+        o = opens[[x for x in cols if x in opens.columns]]
+        if tf == "w":
+            o = o.resample("W-FRI").first()
+        otail = o.reindex(dates)
     dstr = [d.strftime("%Y-%m-%d") for d in dates]
 
     res, hist = {}, {}
@@ -252,9 +260,25 @@ def build_zones(close, high, low, tickers, tf="d", history=False):
             "cloud": cloud, "stretch": _r(ls.get(t), 1),
             "div": dinfo.get(t) if z == "V" else None,
         }
+        # past visits to zones (the stock has since moved on), newest last, compact:
+        # "<zone><prev zone>,<start bar>,<end bar>,<entry close>,<exit close>"
+        # bar numbers index into the page's date list
+        log, i, n = [], 0, len(sm)
+        while i < n:
+            j = i
+            while j + 1 < n and sm[j + 1] == sm[i]:
+                j += 1
+            if j < n - 1 and i > 0 and sm[i] not in ("N", "-") and not np.isnan(closes[i]) and not np.isnan(closes[j]):
+                log.append(f"{sm[i]}{sm[i - 1]},{i},{j},{float(closes[i]):.4g},{float(closes[j]):.4g}")
+            i = j + 1
+        if log:
+            res[t]["log"] = ";".join(log[-LOG_KEEP:])
         if history:
-            hist[t] = {"segs": segments(sm, closes, dstr),
-                       "c": [None if np.isnan(x) else float(f"{x:.4g}") for x in closes]}
+            f4 = lambda arr: [None if np.isnan(x) else float(f"{x:.4g}") for x in arr]
+            hist[t] = {"segs": segments(sm, closes, dstr), "c": f4(closes),
+                       "h": f4(htail[t].to_numpy(float)), "l": f4(ltail[t].to_numpy(float))}
+            if otail is not None and t in otail.columns:
+                hist[t]["o"] = f4(otail[t].to_numpy(float))
     if history:
         return res, dstr, dstr[0], hist
     return res, dstr, dstr[0]

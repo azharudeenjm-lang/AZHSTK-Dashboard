@@ -45,6 +45,9 @@ def write(stocks, sectors, zones, hists, lvls, fund, dates, generated, live=None
                                               "rsi", "adx", "pdi", "mdi", "chop", "cloud", "macd_x", "stretch", "div")}
                 h = hists[tf].get(t) or {}
                 keep["segs"], keep["c"] = h.get("segs", []), h.get("c", [])
+                for k in ("o", "h", "l"):
+                    if k in h:
+                        keep[k] = h[k]
                 prof["z"][tf] = keep
             if lvls[tf].get(t):
                 prof["lv"][tf] = lvls[tf][t]
@@ -54,6 +57,8 @@ def write(stocks, sectors, zones, hists, lvls, fund, dates, generated, live=None
         prof["fib"] = {tf: fb[tf][t] for tf in ("d", "w") if tf in fb and t in fb[tf]}
         sgx = extra.get("sg") or {}
         prof["sg"] = {tf: sgx[tf].get(t, {}) for tf in ("d", "w") if tf in sgx}
+        sx = extra.get("ser") or {}
+        prof["ser"] = {tf: sx[tf].get(t) for tf in ("d", "w") if tf in sx and sx[tf].get(t)}
         if setups and t in setups:
             prof["su"] = setups[t]
         if monthly and t in monthly:

@@ -257,13 +257,21 @@ function drawTable(){
   const t = document.getElementById("t");
   t.innerHTML = `<thead><tr>${COLS.map(([k,l,c])=>`<th class="${c||''}" data-k="${k}" ${sort.k===k?`aria-sort="${sort.dir>0?'ascending':'descending'}"`:''}>${l}</th>`).join("")}</tr></thead><tbody>${
     shown.length ? shown.map(s=>`<tr class="row ${s.sym===openSym?'open':''}" data-sym="${esc(s.sym)}" tabindex="0" aria-expanded="${s.sym===openSym}">${COLS.map(([k])=>cell(s,k)).join("")}</tr>` +
-      (s.sym===openSym && s.ch ? `<tr class="big"><td colspan="${COLS.length}">${chart(s.ch, 760, 260, true)}${keyHTML}</td></tr>` : "")).join("")
+      (s.sym===openSym ? `<tr class="big"><td colspan="${COLS.length}"><div id="bigc" style="max-width:1000px;position:sticky;left:8px">${s.ch ? chart(s.ch, 760, 260, true) + keyHTML : '<p class="mut">Loading chart…</p>'}</div></td></tr>` : "")).join("")
     : `<tr><td class="empty" colspan="${COLS.length}">No stocks match these filters. Try another signal, zone or untick a box.</td></tr>`}</tbody>`;
   t.querySelectorAll("th").forEach(th=>th.addEventListener("click",()=>{ const k=th.dataset.k; if(k==="mini") return;
     sort.dir = sort.k===k ? -sort.dir : (["sym","sig","zone","sup","res","tl"].includes(k)?1:-1); sort.k=k; drawTable(); }));
   t.querySelectorAll("tr.row").forEach(tr=>{ const go=()=>{ openSym = openSym===tr.dataset.sym ? null : tr.dataset.sym; drawTable(); };
     tr.addEventListener("click",go); tr.addEventListener("keydown",e=>{ if(e.key==="Enter") go(); }); });
   const m = document.getElementById("more"); m.hidden = showAll || list.length<=LIMIT; m.textContent = `Show all ${list.length}`;
+  if (openSym && window.AZH_CHART){                 // upgrade the expanded chart to candlesticks
+    const s = list.find(x=>x.sym===openSym), sym = openSym, t0 = tf;
+    Promise.all([window.AZH_STOCK(sym), window.AZH_INDEX()]).then(([p, idx])=>{
+      const el = document.getElementById("bigc");
+      if (!el || openSym!==sym || tf!==t0 || !p || !p.z || !p.z[tf]) return;
+      el.innerHTML = window.AZH_CHART(p.z[tf], s, (idx.dates||{})[tf]||[], tf, (p.fib||{})[tf], {width: Math.min(1000, el.parentElement.clientWidth), bare:true, redraw: drawTable});
+    }).catch(()=>{});
+  }
 }
 function drawAll(){ drawTiles(); drawTable(); }
 function drawRules(){

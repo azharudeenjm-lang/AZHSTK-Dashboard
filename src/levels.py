@@ -234,7 +234,8 @@ def build_levels(close, high, low, volume, tickers, tf="d"):
                 row[key] = {"p": round(res[key]["p"], 2), "d": round(res[key]["d"], 1), "t": res[key]["t"]}
         for key in ("tlr", "tls"):
             if key in res:
-                row[key] = {"v": round(res[key]["v"], 2), "d": round(res[key]["d"], 1), "t": res[key]["t"]}
+                row[key] = {"v": round(res[key]["v"], 2), "d": round(res[key]["d"], 1), "t": res[key]["t"],
+                            "ag": int(len(cc) - 1 - res[key]["a"]), "va": round(float(res[key]["va"]), 2)}
         for key in ("brk", "bdn"):
             if key in res:
                 b = res[key]

@@ -113,10 +113,79 @@ let SMETA = null;
 const SCR = {
   meta(){
     if (!SMETA) SMETA = fetch("screener_meta.json").then(r=>r.ok?r.json():{conds:[],presets:[]}).catch(()=>({conds:[],presets:[]}))
-      .then(m=>{ m._by = Object.fromEntries((m.conds||[]).map(x=>[x.id,x])); SCR._m = m; return m; });
+      .then(m=>{ m._by = Object.fromEntries((m.conds||[]).map(x=>[x.id,x])); m._p = Object.fromEntries((m.pconds||[]).map(x=>[x.id,x])); SCR._m = m; return m; });
     return SMETA; },
   blank(){ return {name:"", mode:"all", conds:[], f:{liq:true}}; },
-  label(m, c, v){ const x = m._by[c.id]; if (!x) return c.id;
+  isP(c){ return String(c.id).startsWith("p_"); },
+  pdef(m, c){ const d = m._p[c.id]; const o = {}; (d ? d.params : []).forEach(q=>{ o[q.k] = (c.p && c.p[q.k] !== undefined) ? c.p[q.k] : q.d; }); return o; },
+  pEvent(m, c){ const o = SCR.pdef(m, c);
+    if (["p_newhi","p_newlo","p_vol","p_gap"].includes(c.id)) return true;
+    return ["xa","xb","tb","tr"].includes(o.op); },
+  pLabel(m, c, v){ const d = m._p[c.id]; if (!d) return c.id; const o = SCR.pdef(m, c);
+    const opq = (d.params.find(q=>q.k==="op")||{}), opl = k => (opq.labels||{})[k] || ({gt:"above",lt:"below",xa:"crossed above",xb:"crossed below"})[k] || k;
+    let t;
+    switch (c.id){
+      case "p_rsi": t = `RSI(${o.per}) ${opl(o.op)} ${o.x}`; break;
+      case "p_chop": t = `Choppiness(${o.per}) ${opl(o.op)} ${o.x}`; break;
+      case "p_adx": t = `ADX(14) ${opl(o.op)} ${o.x}`; break;
+      case "p_di": t = opl(o.op); break;
+      case "p_macd": t = `MACD ${o.line} ${opl(o.op)} ${o.x}`; break;
+      case "p_ma": t = `Price ${opl(o.op)} ${o.type} ${o.per}`; break;
+      case "p_macross": t = `${o.type} ${o.f} ${({xa:"crossed above",xb:"crossed below",gt:"above",lt:"below"})[o.op]} ${o.type} ${o.s}`; break;
+      case "p_newhi": t = `New ${o.x}-bar high`; break;
+      case "p_newlo": t = `New ${o.x}-bar low`; break;
+      case "p_hi52": t = `Within ${o.x}% of 52-week high`; break;
+      case "p_vol": t = `Volume ${o.x}× average (${o.dir} bar)`; break;
+      case "p_gap": t = `Gap up ${o.x}%+`; break;
+      case "p_chg": t = `Price ${o.op==="gt"?"up at least":"changed at most"} ${o.x}% over ${o.n} bars`; break;
+      case "p_rng": t = `Range within ${o.x}% over ${o.n} bars`; break;
+      case "p_st": t = `SuperTrend(${o.set}) ${opl(o.op)}`; break;
+      default: t = d.l;
+    }
+    return `${c.tf==="w"?"W":"D"}: ${t}${SCR.pEvent(m,c) && v>0 ? ` (${v} ${c.tf==="w"?"wk":"bars"} ago)` : ""}`; },
+  // bars-ago (0 = latest) when the condition holds, else null
+  pEval(m, c, ser){
+    if (!ser) return null;
+    const o = SCR.pdef(m, c), n = Math.max(1, c.n || 1), X = +o.x;
+    const thr = (a, op, x) => { if (!a) return null; const L = a.length - 1;
+      if (op==="gt") return a[L]!=null && a[L] > x ? 0 : null;
+      if (op==="lt") return a[L]!=null && a[L] < x ? 0 : null;
+      for (let b=0; b<n && L-b>=1; b++){ const v1 = a[L-b], v0 = a[L-b-1]; if (v1==null||v0==null) continue;
+        if (op==="xa" && v1 > x && v0 <= x) return b; if (op==="xb" && v1 < x && v0 >= x) return b; }
+      return null; };
+    const anyBar = (a, f) => { if (!a) return null; const L = a.length - 1; for (let b=0; b<n && L-b>=0; b++){ if (a[L-b]!=null && f(a[L-b])) return b; } return null; };
+    const P = [5,10,20,30,50,100,150,200];
+    switch (c.id){
+      case "p_rsi": return thr((ser.rsi||{})[o.per], o.op, X*10);
+      case "p_chop": return thr((ser.chop||{})[o.per], o.op, X*10);
+      case "p_adx": return thr(ser.adx, o.op, X*10);
+      case "p_di": { const a = (ser.pdi||[]).map((v,i)=> v==null||ser.mdi[i]==null ? null : v - ser.mdi[i]); return thr(a, o.op, 0); }
+      case "p_macd": return thr(o.line==="line" ? ser.macd : o.line==="signal" ? ser.msig : ser.mh, o.op, X);
+      case "p_newhi": return anyBar(ser.hia, v => v >= X - 1);
+      case "p_newlo": return anyBar(ser.loa, v => v >= X - 1);
+      case "p_hi52": return ser.hi52!=null && ser.hi52 <= X*10 ? 0 : null;
+      case "p_vol": return anyBar(ser.vx, v => o.dir==="rising" ? v >= X*10 : o.dir==="falling" ? v <= -X*10 : Math.abs(v) >= X*10);
+      case "p_gap": return anyBar(ser.gap, v => v >= X*10);
+      case "p_chg": { const v = (ser.chg||{})[o.n]; if (v==null) return null; return (o.op==="gt" ? v >= X*10 : v <= X*10) ? 0 : null; }
+      case "p_rng": { const v = (ser.rng||{})[o.n]; return v!=null && v <= X*10 ? 0 : null; }
+      case "p_ma": { const ma = ser.ma||{}, i = (o.type==="EMA"?8:0) + P.indexOf(+o.per);
+        if (o.op==="gt") return ma.s && ma.s[i]==="1" ? 0 : null;
+        if (o.op==="lt") return ma.s && ma.s[i]==="0" ? 0 : null;
+        const a = (ma.e||{})[`${o.op}_${o.type==="EMA"?"e":"s"}${o.per}`]; return a!=null && a < n ? a : null; }
+      case "p_macross": { let f = +o.f, sl = +o.s; if (f===sl) return null;
+        let op = o.op; if (f > sl){ [f, sl] = [sl, f]; op = ({xa:"xb",xb:"xa",gt:"lt",lt:"gt"})[op]; }
+        const ma = ser.ma||{}, ty = o.type==="EMA"?"e":"s";
+        if (op==="gt" || op==="lt"){ let k = 0, idx = -1; for (let a=0;a<P.length;a++) for (let b=a+1;b<P.length;b++){ if (P[a]===f && P[b]===sl) idx = k; k++; }
+          const bit = (ma.p||"")[(ty==="e"?28:0) + idx]; return (op==="gt" ? bit==="1" : bit==="0") ? 0 : null; }
+        const a = (ma.e||{})[`${op==="xa"?"ca":"cb"}_${ty}${f}_${ty}${sl}`]; return a!=null && a < n ? a : null; }
+      case "p_st": { const st = (ser.st||{})[o.set]; if (!st) return null; const L = st.length - 1;
+        if (o.op==="bull") return st[L]==="1" ? 0 : null; if (o.op==="bear") return st[L]==="0" ? 0 : null;
+        for (let b=0; b<n && L-b>=1; b++){ const a1 = st[L-b], a0 = st[L-b-1];
+          if (o.op==="tb" && a1==="1" && a0==="0") return b; if (o.op==="tr" && a1==="0" && a0==="1") return b; }
+        return null; }
+    }
+    return null; },
+  label(m, c, v){ if (SCR.isP(c)) return SCR.pLabel(m, c, v); const x = m._by[c.id]; if (!x) return c.id;
     return `${c.tf==="w"?"W":"D"}: ${x.l}${x.k==="e" && v>0 ? ` (${v} ${c.tf==="w"?"wk":"bars"} ago)` : ""}`; },
   hits(screen, r, m){
     m = m || SCR._m; if (!m) return null;
@@ -133,8 +202,9 @@ const SCR = {
     if (f.pmax && !(r.price <= f.pmax)) return null;
     const out = []; let n = 0;
     for (const c of screen.conds || []){
-      const x = m._by[c.id]; const v = ((r.sig||{})[c.tf]||{})[c.id];
-      const ok = x && v != null && (x.k === "s" || v < (c.n || 1));
+      let v, ok;
+      if (SCR.isP(c)){ v = SCR.pEval(m, c, (r.ser||{})[c.tf]); ok = v != null; }
+      else { const x = m._by[c.id]; v = ((r.sig||{})[c.tf]||{})[c.id]; ok = x && v != null && (x.k === "s" || v < (c.n || 1)); }
       if (ok){ n++; out.push(SCR.label(m, c, v)); }
       else if ((screen.mode||"all") === "all") return null;
     }
@@ -291,7 +361,7 @@ function screenerBlock(p, tf){
   const groups = {};
   Object.entries(sig).forEach(([id,v])=>{ const x = by[id]; if (!x) return; (groups[x.g] ??= []).push(SCR.label(m, {id, tf}, v).replace(/^[DW]: /,"")); });
   const r = {zd:(p.z.d||{}).zone, zw:(p.z.w||{}).zone, bucket:(p.su||{}).bucket, rs:p.rs, q:(p.sq||{}).w, price:p.px, liquid:p.liq,
-             es:(p.su||{}).earn_soon, sector:p.sec, sig:p.sg};
+             es:(p.su||{}).earn_soon, sector:p.sec, sig:p.sg, ser:p.ser};
   const saved = (WL.get().screens || []).filter(s=>SCR.hits(s, {...r, liquid:true}, m));
   const presets = (m.presets || []).filter(s=>SCR.hits(s, {...r, liquid:true}, m));
   const g = Object.entries(groups);
@@ -328,6 +398,7 @@ function render(){
   const segs = z.segs || [], cur = segs[segs.length-1];
   const sinceTxt = z.capped ? `since before ${dl(dates[0])}` : `since ${dl(z.since)}, ${u(z.days)}`;
   const sig = (lv.sig||[]);
+  const keepTop = (dlg.querySelector(".pf")||{}).scrollTop || 0;
   dlg.innerHTML = `<div class="pf">
   <div class="pf-h"><div><h2 id="pf-title">${esc(s)}</h2><p>${esc(p.n)} · ${esc(p.sec)}${p.ind && p.ind!==p.sec ? " · "+esc(p.ind) : ""}${p.liq?"":" · low liquidity"}</p>
     <div class="pf-px">₹${fmt(p.px,2)} <span>${pct(p.r1d,2)} today</span></div>
@@ -348,7 +419,7 @@ function render(){
       <small>support ${lv.sup?`₹${fmt(lv.sup.p,2)} (−${fmt(lv.sup.d)}%)`:"–"}</small><small>resistance ${lv.res?`₹${fmt(lv.res.p,2)} (+${fmt(lv.res.d)}%)`:"–"}</small></div>
   </div>
 
-  <div class="pf-sec"><h3>Price and zone history</h3>${chart(z, lv, dates, tf, (p.fib||{})[tf])}
+  <div class="pf-sec"><h3>Price chart (${tf==="w"?"weekly":"daily"} candles)</h3>${chart(z, lv, dates, tf, (p.fib||{})[tf])}
     <div class="pf-key">${["Bullish","Strong momentum","Extended","Divergence zone","Bearish","Oversold","Accumulation","Neutral"].map(k=>`<span><i style="--c:var(${ZC[k]})"></i>${k}</span>`).join("")}</div></div>
 
   ${fibBlock((p.fib||{})[tf], tf, p.px)}
@@ -381,35 +452,96 @@ function render(){
     <div><span>Debt/Equity</span><b>${fmt(p.f.de,2)}</b></div><div><span>Mcap</span><b>${p.f.mcap_cr!=null?"₹"+fmt(p.f.mcap_cr,0)+" cr":"–"}</b></div>
   </div></div>`}
   </div>`;
+  if (keepTop) dlg.querySelector(".pf").scrollTop = keepTop;
   dlg.querySelector(".pf-x").onclick = () => dlg.close();
   dlg.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{ curTF=b.dataset.t; render(); });
   wireActions();
 }
 
-function chart(z, lv, dates, tf, fb){
-  const c = z.c || [], n = c.length; if (n<2) return '<p class="pf-mut">No price history.</p>';
-  const W = Math.round(Math.max(340, Math.min(900, ((dlg && dlg.clientWidth) || 900) - 32))), H = Math.round(Math.max(200, W*0.3)), P = {l:6,r:58,t:10,b:22};
-  const vs = c.filter(v=>v!=null); let lo = Math.min(...vs), hi = Math.max(...vs);
-  [lv.sup&&lv.sup.p, lv.res&&lv.res.p].forEach(v=>{ if(v && v>lo*0.85 && v<hi*1.15){ lo=Math.min(lo,v); hi=Math.max(hi,v);} });
-  const m=(hi-lo)*0.06||1; lo-=m; hi+=m;
-  const X = i => P.l + i/(n-1)*(W-P.l-P.r), Y = v => P.t + (hi-v)/(hi-lo)*(H-P.t-P.b);
+/* ---------- candlestick chart with line studies ---------- */
+const CH_KEY = "azh:chart";
+const chOpts = () => { try { return {zones:true, sr:true, tl:true, fib:true, ma:false, ...JSON.parse(localStorage.getItem(CH_KEY)||"{}")}; } catch(e){ return {zones:true,sr:true,tl:true,fib:true,ma:false}; } };
+function chart(z, lv, dates, tf, fb, opt){
+  opt = opt || {};
+  const host = opt.width || ((dlg && dlg.open && dlg.clientWidth) || 900);
+  const W = Math.round(Math.max(340, Math.min(1000, host - 32)));
+  // on a phone, show the latest 60 bars so candles stay readable
+  const keep = W < 600 ? 60 : 1e9, full = (z.c || []).length, cut = Math.max(0, full - keep);
+  const sl = a => (a || []).slice(cut);
+  const c = sl(z.c), n = c.length; if (n<2) return '<p class="pf-mut">No price history.</p>';
+  const o = z.o ? sl(z.o) : c.map((v,i)=>i ? c[i-1] : v), h = z.h ? sl(z.h) : c, l = z.l ? sl(z.l) : c;
+  dates = sl(dates);
+  const T = chOpts(), id = "ch" + Math.random().toString(36).slice(2,8);
+  const H = Math.round(Math.max(240, W*0.42)), P = {l:6,r:62,t:12,b:24};
+  const hv = h.filter(v=>v!=null), lw = l.filter(v=>v!=null);
+  if (!hv.length) return '<p class="pf-mut">No price history.</p>';
+  let lo = Math.min(...lw), hi = Math.max(...hv);
+  const near = v => v && v > lo*0.9 && v < hi*1.1;
+  [lv.sup&&lv.sup.p, lv.res&&lv.res.p].forEach(v=>{ if (T.sr && near(v)){ lo=Math.min(lo,v); hi=Math.max(hi,v);} });
+  const m=(hi-lo)*0.05||1; lo-=m; hi+=m;
+  const step = (W-P.l-P.r)/n, X = i => P.l + (i+0.5)*step, Y = v => P.t + (hi-v)/(hi-lo)*(H-P.t-P.b);
+  const inR = v => v!=null && v>=lo && v<=hi;
+  const up = cssv("--up")||"#1E8F5A", dn = cssv("--down")||"#C2453B";
   let g = "";
-  (z.segs||[]).forEach(s=>{ const a = dates.indexOf(s[1]), b = dates.indexOf(s[2]); if (a<0||b<0) return;
-    const x0 = a===0 ? X(0) : (X(a-1)+X(a))/2, x1 = b===n-1 ? X(n-1) : (X(b)+X(b+1))/2;
-    g += `<rect x="${x0.toFixed(1)}" y="${P.t}" width="${Math.max(1,x1-x0).toFixed(1)}" height="${H-P.t-P.b}" fill="var(${ZC[CODE[s[0]]]})" opacity=".18"><title>${CODE[s[0]]}: ${dl(s[1])} → ${dl(s[2])}</title></rect>`;
-    if (a>0 && s[4]!=null) g += `<circle cx="${X(a)}" cy="${Y(s[4])}" r="3.2" fill="var(${ZC[CODE[s[0]]]})" stroke="var(--panel)" stroke-width="1"><title>Entered ${CODE[s[0]]} ${dl(s[1])} at ₹${fmt(s[4],2)}</title></circle>`; });
-  const hl = (v,col,lab) => v && v>=lo && v<=hi ? `<line x1="${P.l}" x2="${W-P.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="${col}" stroke-dasharray="5 4" stroke-width="1.2"/><text x="${W-P.r+4}" y="${Y(v)+4}" font-size="11" fill="${col}">${lab} ${fmt(v, v<100?2:0)}</text>` : "";
-  g += hl(lv.res&&lv.res.p, cssv("--down")||"#C2453B", "R") + hl(lv.sup&&lv.sup.p, cssv("--up")||"#1E8F5A", "S");
-  if (fb) ["38.2","50","61.8"].forEach(k=>{ const v = fb.lv[k]; if (v && v>=lo && v<=hi)
-    g += `<line x1="${P.l}" x2="${W-P.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="#C9780F" stroke-width="1" stroke-dasharray="2 3" opacity=".9"/><text x="${P.l+4}" y="${Y(v)-3}" font-size="10" fill="#C9780F">${k}%</text>`; });
-  let d = "", pen = false;
-  c.forEach((v,i)=>{ if (v==null){ pen=false; return; } d += `${pen?"L":"M"}${X(i).toFixed(1)},${Y(v).toFixed(1)}`; pen = true; });
-  g += `<path d="${d}" fill="none" stroke="var(--ink)" stroke-width="1.6" stroke-linejoin="round"/>`;
-  const last = vs[vs.length-1];
-  g += `<text x="${W-P.r+4}" y="${Y(last)+4}" font-size="11" font-weight="700" fill="var(--ink)">${fmt(last, last<100?2:0)}</text>`;
-  if (dates.length){ [0, Math.floor((n-1)/2), n-1].forEach((i,k)=>{ g += `<text x="${X(i)}" y="${H-6}" font-size="11" fill="var(--muted)" text-anchor="${["start","middle","end"][k]}">${dl(dates[i])}</text>`; }); }
-  return `<svg class="pf-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Price chart coloured by technical zone">${g}</svg>`;
+  // zone shading
+  if (T.zones) (z.segs||[]).forEach(s=>{ let a = dates.indexOf(s[1]); const b = dates.indexOf(s[2]); if (b<0) return; if (a<0) a = 0;
+    g += `<rect x="${(P.l+a*step).toFixed(1)}" y="${P.t}" width="${Math.max(1,(b-a+1)*step).toFixed(1)}" height="${H-P.t-P.b}" fill="var(${ZC[CODE[s[0]]]})" opacity=".13"><title>${CODE[s[0]]}: ${dl(s[1])} → ${dl(s[2])}</title></rect>`; });
+  // horizontal grid
+  for (let k=1;k<4;k++){ const v = lo + (hi-lo)*k/4; g += `<line x1="${P.l}" x2="${W-P.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-width=".6"/><text x="${W-P.r+4}" y="${Y(v)+4}" font-size="10" fill="var(--muted)">${fmt(v, v<100?2:0)}</text>`; }
+  // moving averages
+  if (T.ma) [[20,"#2F62C8"],[50,"#C9780F"]].forEach(([p,col])=>{ let d="", pen=false;
+    for (let i=0;i<n;i++){ if (i<p-1){ continue; } let sum=0, ok=true; for (let j=i-p+1;j<=i;j++){ if (c[j]==null){ ok=false; break; } sum+=c[j]; }
+      if (!ok){ pen=false; continue; } const v=sum/p; d += `${pen?"L":"M"}${X(i).toFixed(1)},${Y(v).toFixed(1)}`; pen=true; }
+    g += `<path d="${d}" fill="none" stroke="${col}" stroke-width="1.3" opacity=".9"/>`; });
+  // candles
+  const bw = Math.max(1, Math.min(10, step*0.68));
+  for (let i=0;i<n;i++){ if (c[i]==null || h[i]==null || l[i]==null) continue;
+    const op = o[i]!=null ? o[i] : (i ? c[i-1] : c[i]), col = c[i] >= op ? up : dn, x = X(i);
+    const yT = Y(Math.max(op,c[i])), yB = Y(Math.min(op,c[i]));
+    g += `<line x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${Y(h[i]).toFixed(1)}" y2="${Y(l[i]).toFixed(1)}" stroke="${col}" stroke-width="1"/>`;
+    g += `<rect x="${(x-bw/2).toFixed(1)}" y="${yT.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1,yB-yT).toFixed(1)}" fill="${col}"/>`; }
+  // zone entry markers
+  if (T.zones) (z.segs||[]).forEach(s=>{ const a = dates.indexOf(s[1]); if (a>0 && s[4]!=null && inR(s[4]))
+    g += `<path d="M${X(a)},${(Y(l[a]??s[4])+6).toFixed(1)} l-4,7 h8 z" fill="var(${ZC[CODE[s[0]]]})"><title>Entered ${CODE[s[0]]} ${dl(s[1])} at ₹${fmt(s[4],2)}</title></path>`; });
+  // support / resistance
+  const hl = (v,col,lab,dash) => inR(v) ? `<line x1="${P.l}" x2="${W-P.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="${col}" stroke-dasharray="${dash||"6 4"}" stroke-width="1.3"/><text x="${W-P.r+4}" y="${Y(v)+4}" font-size="11" font-weight="600" fill="${col}">${lab} ${fmt(v, v<100?2:0)}</text>` : "";
+  if (T.sr){ g += hl(lv.res&&lv.res.p, dn, "R") + hl(lv.sup&&lv.sup.p, up, "S"); }
+  // trendlines: start point is `ag` bars before the last bar
+  if (T.tl) [["tlr", dn, "Falling trendline"],["tls", up, "Rising trendline"]].forEach(([k,col,name])=>{ const t = lv[k]; if (!t || t.ag==null || t.va==null) return;
+    const ia = (n-1) - t.ag, slope = t.ag ? (t.v - t.va)/t.ag : 0, x0 = Math.max(0, ia), y0 = t.va + slope*(x0 - ia);
+    const x1 = n - 1 + 3, y1 = t.v + slope*3;
+    g += `<line x1="${X(x0).toFixed(1)}" y1="${Y(y0).toFixed(1)}" x2="${Math.min(W-P.r, X(x1)).toFixed(1)}" y2="${Y(y1).toFixed(1)}" stroke="${col}" stroke-width="1.8"><title>${name}: ₹${fmt(t.v,2)} now, ${t.t} touches</title></line>`; });
+  // fibonacci
+  if (T.fib && fb){ ["38.2","50","61.8"].forEach(k=>{ const v = fb.lv[k]; if (inR(v))
+      g += `<line x1="${P.l}" x2="${W-P.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="#C9780F" stroke-width="1" stroke-dasharray="2 3"/><text x="${P.l+4}" y="${Y(v)-3}" font-size="10" fill="#C9780F">Fib ${k}%</text>`; });
+    (fb.t||[]).slice(0,2).forEach((t,i)=>{ if (inR(t.p)) g += `<line x1="${P.l}" x2="${W-P.r}" y1="${Y(t.p)}" y2="${Y(t.p)}" stroke="#13857A" stroke-width="1" stroke-dasharray="8 3"/><text x="${P.l+4}" y="${Y(t.p)-3}" font-size="10" fill="#13857A">T${i+1} ${fmt(t.p, t.p<100?2:0)}</text>`; }); }
+  // last price tag
+  const last = c[n-1]; if (last!=null){ const col = c[n-1] >= (o[n-1]??c[n-2]??last) ? up : dn;
+    g += `<rect x="${W-P.r+1}" y="${Y(last)-9}" width="${P.r-3}" height="17" rx="3" fill="${col}"/><text x="${W-P.r+5}" y="${Y(last)+4}" font-size="11" font-weight="700" fill="#fff">${fmt(last, last<100?2:0)}</text>`; }
+  if (dates.length){ [0, Math.floor((n-1)/2), n-1].forEach((i,k)=>{ g += `<text x="${X(i)}" y="${H-7}" font-size="11" fill="var(--muted)" text-anchor="${["start","middle","end"][k]}">${dl(dates[i])}</text>`; }); }
+  g += `<line class="cx" x1="0" x2="0" y1="${P.t}" y2="${H-P.b}" stroke="var(--muted)" stroke-dasharray="3 3" visibility="hidden"/>`;
+  const btn = (k, label) => `<button type="button" class="pf-btn ${T[k]?'on':''}" data-ct="${k}" aria-pressed="${!!T[k]}" style="padding:3px 9px;font-size:.76rem">${label}</button>`;
+  const html = `<div class="pf-act" style="margin:0 0 6px">${btn("zones","Zones")}${btn("sr","Support / resistance")}${btn("tl","Trendlines")}${btn("fib","Fibonacci")}${btn("ma","MA 20 / 50")}</div>
+    <div class="pf-mut" id="${id}-r" style="font-size:.78rem;min-height:1.2em">${cut ? `Latest ${n} bars. ` : ""}Tap or hover a candle for its prices.</div>
+    <svg id="${id}" class="pf-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Candlestick chart with support, resistance, trendlines and Fibonacci levels" style="touch-action:pan-y">${g}</svg>`;
+  setTimeout(()=>{ const svg = document.getElementById(id); if (!svg) return;
+    const r = document.getElementById(id+"-r"), cx = svg.querySelector(".cx");
+    const show = ev => { const pt = svg.getBoundingClientRect(), x = (ev.clientX - pt.left) * W / pt.width;
+      const i = Math.max(0, Math.min(n-1, Math.floor((x - P.l)/step))); if (c[i]==null) return;
+      cx.setAttribute("x1", X(i)); cx.setAttribute("x2", X(i)); cx.setAttribute("visibility","visible");
+      const ch = i ? (c[i]/c[i-1]-1)*100 : null;
+      r.innerHTML = `<b>${dl(dates[i])}</b> · O ${fmt(o[i],2)} · H ${fmt(h[i],2)} · L ${fmt(l[i],2)} · C ${fmt(c[i],2)}${ch!=null?` (${pct(ch,2)})`:""}`; };
+    svg.addEventListener("pointermove", show); svg.addEventListener("pointerdown", show);
+    const wrap = svg.parentElement;
+    wrap.querySelectorAll("[data-ct]").forEach(b=>b.onclick=()=>{ const t = chOpts(); t[b.dataset.ct] = !t[b.dataset.ct];
+      try { localStorage.setItem(CH_KEY, JSON.stringify(t)); } catch(e){}
+      if (opt.redraw) opt.redraw(); else if (dlg && dlg.open) render(); });
+  }, 0);
+  return opt.bare ? html : `<div>${html}</div>`;
 }
+window.AZH_CHART = (z, lv, dates, tf, fb, opt) => chart(z, lv, dates, tf, fb, opt);
+window.AZH_STOCK = sym => loadStock(sym);
+window.AZH_INDEX = () => loadIndex();
 
 document.addEventListener("click", e => {
   const el = e.target.closest("[data-p]"); if (!el) return;

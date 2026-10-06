@@ -9,6 +9,7 @@ import json
 from datetime import datetime, timedelta, timezone
 
 from .config import DOCS, SCREENER_EVENT_BARS
+from .series import PMETA
 from .signals import META
 
 PRESETS = [
@@ -21,16 +22,19 @@ PRESETS = [
     {"name": "Weekly SuperTrend turned bullish", "mode": "all", "conds": [{"tf": "w", "id": "st_flip", "n": 3}, {"tf": "w", "id": "macd_ab0", "n": 1}], "f": {}},
     {"name": "Weekly cloud breakout", "mode": "all", "conds": [{"tf": "w", "id": "cloud_x", "n": 3}], "f": {"rs": 50}},
     {"name": "Bullish candle at support", "mode": "all", "conds": [{"tf": "d", "id": "lv_sup", "n": 1}, {"tf": "d", "id": "engulf", "n": 3}], "f": {}},
+    {"name": "Trending, not choppy: Choppiness(14) below 38.2 and ADX above 25", "mode": "all", "conds": [{"tf": "d", "id": "p_chop", "n": 1, "p": {"per": 14, "op": "lt", "x": 38.2}}, {"tf": "d", "id": "p_adx", "n": 1, "p": {"op": "gt", "x": 25}}], "f": {}},
+    {"name": "Coiling: weekly Choppiness(14) above 61.8 within 10% of highs", "mode": "all", "conds": [{"tf": "w", "id": "p_chop", "n": 1, "p": {"per": 14, "op": "gt", "x": 61.8}}, {"tf": "w", "id": "p_hi52", "n": 1, "p": {"x": 10}}], "f": {}},
+    {"name": "RSI(14) crossed above 55 with EMA 20 above EMA 50", "mode": "all", "conds": [{"tf": "d", "id": "p_rsi", "n": 3, "p": {"per": 14, "op": "xa", "x": 55}}, {"tf": "d", "id": "p_macross", "n": 1, "p": {"type": "EMA", "f": 20, "s": 50, "op": "gt"}}], "f": {}},
     {"name": "Any bullish reversal candle (weekly)", "mode": "any", "conds": [{"tf": "w", "id": "hammer", "n": 2}, {"tf": "w", "id": "engulf", "n": 2}, {"tf": "w", "id": "mstar", "n": 2}, {"tf": "w", "id": "piercing", "n": 2}], "f": {}},
 ]
 
 
-def render(rows, sig):
+def render(rows, sig, ser=None):
     """rows: list of dicts per stock; sig: {"d": {sym: {...}}, "w": {...}}."""
     DOCS.mkdir(parents=True, exist_ok=True)
     ist = datetime.now(timezone(timedelta(hours=5, minutes=30)))
     meta = {"conds": [{"id": i, "g": g, "l": l, "k": k} for i, g, l, k in META],
-            "presets": PRESETS, "nb": SCREENER_EVENT_BARS}
+            "presets": PRESETS, "nb": SCREENER_EVENT_BARS, "pconds": PMETA}
     dump = lambda o: json.dumps(o, separators=(",", ":"), allow_nan=False)
     (DOCS / "screener_meta.json").write_text(dump(meta), encoding="utf-8")
     cols = ["sym", "name", "sector", "liquid", "price", "r1d", "r1m", "r3m", "rs", "zd", "zw", "bucket", "q", "hi", "es"]
@@ -38,6 +42,9 @@ def render(rows, sig):
             "rows": [[r.get(c) for c in cols] for r in rows],
             "sig": {tf: [sig[tf].get(r["sym"], {}) for r in rows] for tf in ("d", "w")}}
     (DOCS / "screener.json").write_text(dump(data), encoding="utf-8")
+    for tf in ("d", "w"):        # indicator numbers: loaded only when a "your numbers" condition is used
+        (DOCS / f"screener_ser_{tf}.json").write_text(
+            dump([(ser or {}).get(tf, {}).get(r["sym"]) for r in rows]), encoding="utf-8")
     (DOCS / "screener.html").write_text(TEMPLATE, encoding="utf-8")
 
 
@@ -77,6 +84,10 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
 .cond{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:8px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:8px}
 @media(max-width:600px){.cond{grid-template-columns:auto minmax(0,1fr) auto}.cond .within{grid-column:2}}
 .cond select.c{width:100%}
+.prm{grid-column:2/-1;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:.8rem;color:var(--muted)}
+.prm label{display:flex;gap:5px;align-items:center}
+.prm input[type=number]{width:80px}
+.prm select,.prm input{padding:4px 7px}
 .x{font:700 1rem var(--font);background:transparent;border:0;color:var(--muted);cursor:pointer;padding:4px 8px}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden}
 .seg button{border:0;background:transparent;color:var(--muted);font:500 .84rem var(--font);padding:5px 12px;cursor:pointer}
@@ -158,7 +169,8 @@ button.psym{all:unset;font-weight:700;cursor:pointer;border-bottom:1px dotted cu
 <section class="panel">
   <h2>How it works</h2>
   <ul class="sub" style="padding-left:18px">
-    <li>Every evening each stock is checked against 65 conditions on daily and weekly bars. Crossovers, patterns and new highs are remembered for the last 10 bars, so you can ask for "within 3 bars" and so on.</li>
+    <li><b>Indicators (your numbers)</b>, at the top of the condition list, let you type your own levels: RSI, Choppiness Index, ADX, MACD, volume multiple, gap %, % from the 52-week high, price change, range, and N bars for a new high or low. Periods are picked from common values (RSI 7/9/14/21, Choppiness 14/21, SMA and EMA 5 to 200).</li>
+    <li>Every evening each stock is checked against 130 ready-made conditions on daily and weekly bars. Crossovers, patterns and new highs are remembered for the last 10 bars, so you can ask for "within 3 bars" and so on.</li>
     <li>Each condition has its own timeframe, so one screen can mix weekly and daily, for example a weekly breakout with daily RSI 50–70.</li>
     <li>Saved screens are stored on this device and are included in the My list backup. Any stock's pop-up shows which conditions it meets and which of your saved screens it matches.</li>
     <li>Weekly bars include the week in progress. End-of-day data. For research only, not investment advice.</li>
@@ -175,7 +187,13 @@ const tv = s => "https://www.tradingview.com/chart/?symbol=" + encodeURIComponen
 const scr = s => "https://www.screener.in/company/" + encodeURIComponent(s) + "/";
 const ZONES = ["Bearish","Oversold","Accumulation","Bullish","Strong momentum","Extended","Divergence zone","Overbought","Danger zone","Neutral"];
 const ZC = {"Bearish":"#C2453B","Oversold":"#6B4BB8","Accumulation":"#2F62C8","Bullish":"#1E8F5A","Strong momentum":"#13857A","Extended":"#0B6B4B","Divergence zone":"#A8285E","Overbought":"#C9780F","Danger zone":"#A8285E","Neutral":"#8C99AB"};
-let META, DATA, ROWS = [], screen = SCR.blank(), sort = {k:"rs",dir:-1}, showAll = false;
+let META, DATA, ROWS = [], screen = SCR.blank(), sort = {k:"rs",dir:-1}, showAll = false, SER = null, serP = null;
+function ensureSer(){
+  if (!serP){ const g = document.getElementById("gen"); g.dataset.t = g.textContent; g.textContent += " Loading indicator numbers…";
+    serP = Promise.all(["d","w"].map(tf=>fetch(`screener_ser_${tf}.json`).then(r=>r.ok?r.json():[]).catch(()=>[])))
+      .then(([d,w])=>{ ROWS.forEach((r,i)=>{ r.ser = {d:d[i], w:w[i]}; }); SER = true; g.textContent = g.dataset.t; }); }
+  return serP;
+}
 
 Promise.all([SCR.meta(), fetch("screener.json").then(r=>r.json())]).then(([m, d])=>{
   META = m; DATA = d;
@@ -192,22 +210,37 @@ Promise.all([SCR.meta(), fetch("screener.json").then(r=>r.json())]).then(([m, d]
   drawSaved();
 });
 
+const OPL = {gt:"above", lt:"below", xa:"crossed above", xb:"crossed below"};
+function paramControls(c){
+  const d = (META.pconds||[]).find(x=>x.id===c.id); if (!d) return "";
+  const o = SCR.pdef(META, c);
+  return `<div class="prm">${d.params.map(q=>{
+    if (q.t==="num") return `<label>${esc(q.lab||"")}<input type="number" data-k="${q.k}" value="${o[q.k]}" step="${q.int?1:"any"}" ${q.min!=null?`min="${q.min}"`:""} ${q.max!=null?`max="${q.max}"`:""} inputmode="decimal"></label>`;
+    const opts = q.o.map(v=>`<option value="${v}" ${String(v)===String(o[q.k])?"selected":""}>${esc(q.t==="op" ? ((q.labels||{})[v] || OPL[v] || v) : v)}</option>`).join("");
+    return `<label>${q.t==="op" ? "" : esc(q.lab||"")}<select data-k="${q.k}">${opts}</select></label>`; }).join("")}</div>`;
+}
 function condRow(c, i){
   const groups = [...new Set(META.conds.map(x=>x.g))];
-  const opts = groups.map(g=>`<optgroup label="${esc(g)}">${META.conds.filter(x=>x.g===g).map(x=>`<option value="${x.id}" ${x.id===c.id?"selected":""}>${esc(x.l)}</option>`).join("")}</optgroup>`).join("");
-  const kind = (META.conds.find(x=>x.id===c.id)||{}).k;
+  const pg = (META.pconds||[]).length ? `<optgroup label="${esc(META.pconds[0].g)}">${META.pconds.map(x=>`<option value="${x.id}" ${x.id===c.id?"selected":""}>${esc(x.l)}</option>`).join("")}</optgroup>` : "";
+  const opts = pg + groups.map(g=>`<optgroup label="${esc(g)}">${META.conds.filter(x=>x.g===g).map(x=>`<option value="${x.id}" ${x.id===c.id?"selected":""}>${esc(x.l)}</option>`).join("")}</optgroup>`).join("");
+  const isP = SCR.isP(c);
+  const kind = isP ? (SCR.pEvent(META, c) ? "e" : "s") : (META.conds.find(x=>x.id===c.id)||{}).k;
   return `<div class="cond" data-i="${i}">
     <div class="seg" role="group" aria-label="Timeframe"><button data-tf="d" aria-pressed="${c.tf==="d"}">D</button><button data-tf="w" aria-pressed="${c.tf==="w"}">W</button></div>
     <select class="c" aria-label="Condition">${opts}</select>
     ${kind==="e" ? `<select class="within" aria-label="How recent"><option value="1" ${c.n==1?"selected":""}>last bar</option><option value="3" ${c.n==3?"selected":""}>within 3 bars</option><option value="5" ${c.n==5?"selected":""}>within 5 bars</option><option value="10" ${c.n==10?"selected":""}>within 10 bars</option></select>` : `<span class="within mut" style="font-size:.8rem">now</span>`}
-    <button class="x" aria-label="Remove condition">×</button></div>`;
+    <button class="x" aria-label="Remove condition">×</button>${isP ? paramControls(c) : ""}</div>`;
 }
 function drawConds(){
   const box = document.getElementById("conds");
   box.innerHTML = screen.conds.map(condRow).join("") || `<p class="sub" style="margin:0">No conditions: only the filters below apply.</p>`;
   box.querySelectorAll(".cond").forEach(el=>{ const i = +el.dataset.i;
     el.querySelectorAll("[data-tf]").forEach(b=>b.onclick=()=>{ screen.conds[i].tf = b.dataset.tf; drawConds(); run(); });
-    el.querySelector("select.c").onchange = e => { screen.conds[i].id = e.target.value; screen.conds[i].n = screen.conds[i].n || 3; drawConds(); run(); };
+    el.querySelector("select.c").onchange = e => { screen.conds[i].id = e.target.value; screen.conds[i].n = screen.conds[i].n || 3; delete screen.conds[i].p; drawConds(); run(); };
+    el.querySelectorAll(".prm [data-k]").forEach(inp=>inp.addEventListener("change", e => {
+      const c = screen.conds[i]; c.p = c.p || {}; const k = e.target.dataset.k, v = e.target.value;
+      c.p[k] = e.target.type==="number" ? (v==="" ? undefined : +v) : (k==="set" || isNaN(+v) ? v : +v);
+      drawConds(); run(); }));
     const w = el.querySelector("select.within"); if (w) w.onchange = e => { screen.conds[i].n = +e.target.value; run(); };
     el.querySelector(".x").onclick = () => { screen.conds.splice(i,1); drawConds(); run(); }; });
   document.querySelectorAll("[data-m]").forEach(b=>b.setAttribute("aria-pressed", b.dataset.m===screen.mode));
@@ -223,6 +256,7 @@ function load(s){ screen = JSON.parse(JSON.stringify(s)); screen.mode = screen.m
   writeFilters(screen.f); document.getElementById("sname").value = s.name && !META.presets.includes(s) ? s.name : ""; drawConds(); run(); }
 
 function run(){
+  if (screen.conds.some(c=>SCR.isP(c)) && !SER){ ensureSer().then(run); return; }
   screen.f = readFilters();
   const L = ROWS.map(r=>({r, hits: SCR.hits(screen, r)})).filter(x=>x.hits);
   const key = (x,k) => k==="hits" ? x.hits.length : x.r[k];
@@ -246,7 +280,7 @@ function drawSaved(){
   document.querySelectorAll("[data-l]").forEach(b=>b.onclick=()=>load(list[+b.dataset.l]));
   document.querySelectorAll("[data-d]").forEach(b=>b.onclick=()=>{ if (!confirm(`Delete "${list[+b.dataset.d].name}"?`)) return; const d = WL.get(); d.screens.splice(+b.dataset.d,1); WL.save(d); drawSaved(); });
 }
-document.getElementById("add").onclick = () => { screen.conds.push({tf:"d", id:"rsi_x50", n:3}); drawConds(); run(); };
+document.getElementById("add").onclick = () => { screen.conds.push({tf:"d", id:"p_rsi", n:3}); drawConds(); run(); };
 document.getElementById("clear").onclick = () => load(SCR.blank());
 document.getElementById("preset").onchange = e => { if (e.target.value!=="") load(META.presets[+e.target.value]); e.target.value = ""; };
 document.querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>{ screen.mode = b.dataset.m; drawConds(); run(); });

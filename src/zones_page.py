@@ -79,6 +79,11 @@ h2{font-size:1.1rem;margin:0 0 4px;font-weight:600}
 .ent button{font:inherit;font-size:.8rem;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;padding:4px 8px;cursor:pointer;display:flex;gap:6px;align-items:center}
 .ent button i{width:8px;height:8px;border-radius:50%;background:var(--c);display:inline-block}
 .ent button small{color:var(--muted)}
+.ent button.gone{border-style:dashed;opacity:.8}
+.ent button.gone small{font-size:.7rem}
+.now{display:block;font-size:.74rem;color:var(--muted);margin-top:2px}
+.now .chip{font-size:.66rem;padding:0 6px;background:transparent;color:var(--c);border:1px solid var(--c)}
+tr.gone td{background:color-mix(in srgb,var(--line) 22%,var(--panel))}
 .zg{margin:0 0 10px;padding-left:10px;border-left:3px solid var(--line)}
 .zg-h{margin:0 0 6px;font-size:.85rem}
 .fg{display:grid;grid-template-columns:minmax(120px,max-content) 1fr;gap:6px 10px;align-items:start;margin:0 0 6px}
@@ -161,6 +166,7 @@ button.tv{background:transparent;font-family:inherit;line-height:inherit;cursor:
     <input type="search" id="q" placeholder="Find a stock" aria-label="Find a stock">
     <label class="tog"><input type="checkbox" id="liq" checked> Liquid only</label>
     <label class="tog"><input type="checkbox" id="grp" checked> Group by where they came from</label>
+    <label class="tog"><input type="checkbox" id="past" checked> Include stocks that have since moved on</label>
   </div>
   <div class="tbl"><table id="t"></table></div>
   <button class="more" id="more" hidden></button>
@@ -195,10 +201,23 @@ const chip = z => `<span class="chip" style="--c:${zc(z)}">${esc(z)}</span>`;
 
 let zoneF = null, sort = {k:"days",dir:1}, showAll = false, hl = null; const openDays = new Set();
 let period = 30, grpOpen = new Map();
+let PAST = [];
 let tf = "d", S = [], dates = [], sessIdx = {}, P = D.params.d;
 function setTF(t){
   tf = t; P = D.params[t]; dates = D.tf[t].dates;
   S = D.stocks.filter(s=>s[t]).map(s=>({sym:s.sym,name:s.name,sector:s.sector,liquid:s.liquid,price:s.price,r1d:s.r1d,r1w:s.r1w,r1m:s.r1m,...s[t]}));
+  // past visits: one row per earlier zone entry; "now" is where the stock is today
+  PAST = [];
+  const ALL = D.tf[t].all || dates;
+  S.forEach(s=>(s.log ? s.log.split(";") : []).forEach(g=>{
+    const [cz, a0, b0, e0, x0] = g.split(","), code = cz[0], prevCode = cz[1], a = +a0, b = +b0, entry = +e0, exitPx = +x0;
+    const start = ALL[a], end = ALL[b];
+    PAST.push({...s, zone: CODE[code], since: start, until: end, days: b - a + 1, entry, exitPx,
+      prev: prevCode ? CODE[prevCode] : null, capped: false, new: false, div: null,
+      move: entry && s.price ? (s.price/entry-1)*100 : null, inzone: entry && exitPx ? (exitPx/entry-1)*100 : null,
+      now: s.zone, past: true});
+  }));
+  S.forEach(s=>{ s.inzone = s.move; });
   sessIdx = {}; dates.forEach((d,i)=>sessIdx[d]=dates.length-1-i);
   document.querySelectorAll("[data-tf]").forEach(b=>b.setAttribute("aria-pressed", b.dataset.tf===t));
   const last = dates[dates.length-1];
@@ -218,6 +237,16 @@ function setSub(){
   document.getElementById("all-sub").textContent = `Tap a column to sort. The strip shows the zone for each of the last ${unitsN(period)}, oldest on the left.`;
 }
 const entered = s => s.since && sessIdx[s.since]!=null && sessIdx[s.since] < period && ORDER.includes(s.zone);
+const withPast = () => document.getElementById("past").checked;
+function filt(list){
+  const liq = document.getElementById("liq").checked;
+  const sec = document.getElementById("f-sec").value, pv = document.getElementById("f-prev").value;
+  return list.filter(s => (!liq || s.liquid) && (!sec || s.sector===sec)
+    && (!pv || (pv==="__old" ? s.capped : (!s.capped && s.prev===pv))));
+}
+const pastBase = () => withPast() ? filt(PAST).filter(entered) : [];
+const nowTag = s => s.past ? `<span class="now" style="--c:${zc(s.now)}">moved on ${dlabel(nextDay(s.until))} · now <span class="chip" style="--c:${zc(s.now)}">${esc(s.now)}</span></span>` : "";
+function nextDay(d){ const A = D.tf[tf].all || dates, i = A.indexOf(d); return i>=0 && i<A.length-1 ? A[i+1] : d; }
 function drawRules(){
   const T = D.th, p = P, ma = tf==="d" ? `${p.ma}-day` : `${p.ma}-week`;
   document.getElementById("rules").innerHTML = `<p class="sub" style="margin-top:10px">${p.label} rules, checked in this order on each closing bar: oversold, divergence zone, extended, strong momentum, bullish, bearish, accumulation. The first match wins. Bullish, bearish and accumulation must hold for ${unitsN(p.confirm)} before a move counts. Oversold, divergence, extended and strong momentum start and end on the bar their condition is met or lost.${tf==="w"?" The current week is included while it is still forming: its bar uses the latest daily close, so a stock can enter or leave a weekly zone mid-week. The week is final after Friday's close.":""}</p>
@@ -232,22 +261,17 @@ function drawRules(){
     <dt>Neutral</dt><dd>None of the above. Not one of the six zones; shown only when you pick it in the zone filter.</dd>
   </dl>`;
 }
-function base(){
-  const liq = document.getElementById("liq").checked;
-  const sec = document.getElementById("f-sec").value, pv = document.getElementById("f-prev").value;
-  return S.filter(s => (!liq || s.liquid) && (!sec || s.sector===sec)
-    && (!pv || (pv==="__old" ? s.capped : (!s.capped && s.prev===pv))));
-}
+function base(){ return filt(S); }
 
 function drawCycle(){
   const b = base();
   const el = document.getElementById("cycle");
   el.classList.toggle("filtering", !!zoneF);
   el.innerHTML = ORDER.map((z,i)=>{
-    const all = b.filter(s=>s.zone===z), nw = all.filter(entered).length;
+    const all = b.filter(s=>s.zone===z), nw = all.filter(entered).length, gone = pastBase().filter(s=>s.zone===z).length;
     return `<button class="z" style="--c:${zc(z)}" data-z="${z}" aria-pressed="${zoneF===z}">
       <span class="k">${i+1}</span><span class="n">${all.length}</span>
-      <span><span class="t">${z}</span><br><span class="s">${nw ? `${nw} entered in ${unitsN(period)}` : `none entered in ${unitsN(period)}`}</span></span></button>`;}).join("");
+      <span><span class="t">${z}</span><br><span class="s">${nw+gone ? `${nw+gone} entered in ${unitsN(period)}${gone?`, ${nw} still in`:""}` : `none entered in ${unitsN(period)}`}</span></span></button>`;}).join("");
   el.querySelectorAll(".z").forEach(bn=>bn.addEventListener("click",()=>{
     zoneF = zoneF===bn.dataset.z ? null : bn.dataset.z;
     document.getElementById("f-zone").value = zoneF||""; showAll=false; drawAll(); }));
@@ -255,8 +279,10 @@ function drawCycle(){
 
 function drawNew(){
   const nd = period;
-  document.getElementById("new-sub").textContent = `Stocks that moved into their current zone in the last ${unitsN(nd)} and are still in it, newest first. Tap one to see its full history.`;
-  const list = base().filter(s=>entered(s) && (!zoneF || s.zone===zoneF));
+  document.getElementById("new-sub").textContent = withPast()
+    ? `Every stock that entered a zone in the last ${unitsN(nd)}, newest first. Dashed chips have since moved on; the small label shows the zone they are in now and the % move since they entered. Tap one to see its full history.`
+    : `Stocks that moved into their current zone in the last ${unitsN(nd)} and are still in it, newest first. Tap one to see its full history.`;
+  const list = [...base().filter(entered), ...pastBase()].filter(s=>!zoneF || s.zone===zoneF);
   const by = {}; list.forEach(s=>(by[s.since] ??= []).push(s));
   const keys = Object.keys(by).sort().reverse();
   const box = document.getElementById("days");
@@ -272,12 +298,13 @@ function drawNew(){
       inner += `<div class="zg"><div class="zg-h">${chip(z)} <b>${zi.length}</b></div>` +
         [...g.entries()].sort((a,b)=>b[1].length-a[1].length).map(([pv,list])=>{
           const key = d+"|"+z+"|"+pv, CAP = 18, full = openDays.has(key) || list.length <= CAP;
-          list.sort((a,b)=>a.sym.localeCompare(b.sym));
+          list.sort((a,b)=>(a.past-b.past) || a.sym.localeCompare(b.sym));
           return `<div class="fg"><span class="fg-h">from ${esc(pv)} <span class="mut">${list.length}</span></span><div class="ent">${
-            (full?list:list.slice(0,CAP)).map(s=>`<button data-p="${esc(s.sym)}" style="--c:${zc(z)}" title="${esc(s.name)}"><i style="--c:${zc(pv)}"></i><b>${esc(s.sym)}</b></button>`).join("")}${
+            (full?list:list.slice(0,CAP)).map(s=>`<button data-p="${esc(s.sym)}" class="${s.past?"gone":""}" style="--c:${zc(z)}" title="${esc(s.name)}${s.past?` · now ${esc(s.now)}`:""}"><i style="--c:${zc(pv)}"></i><b>${esc(s.sym)}</b>${s.past?`<small style="color:${zc(s.now)}">→ ${esc(s.now)}</small>`:""}${s.move!=null && Math.abs(s.move)>=0.05?`<small class="${s.move>=0?"up":"down"}">${s.move>0?"+":""}${fmt(s.move,1)}%</small>`:""}</button>`).join("")}${
             full ? "" : `<button class="more" data-day="${esc(key)}" style="margin:0">Show all ${list.length}</button>`}</div></div>`; }).join("") + `</div>`;
     });
-    return `<div class="day"><h3>${head} <span>${tag}, ${items.length} ${items.length===1?"stock":"stocks"}</span></h3>${inner}</div>`;
+    const gone = items.filter(s=>s.past).length;
+    return `<div class="day"><h3>${head} <span>${tag}, ${items.length} ${items.length===1?"stock":"stocks"}${gone?`, ${gone} since moved on`:""}</span></h3>${inner}</div>`;
   }).join("");
   box.querySelectorAll("button[data-day]").forEach(b=>b.addEventListener("click",()=>{ openDays.add(b.dataset.day); drawNew(); }));
   box.querySelectorAll("button[data-sym]").forEach(b=>b.addEventListener("click",()=>{
@@ -292,12 +319,12 @@ function strip(full){
     [...code].map((c,i)=>`<rect x="${i*(w+gap)}" y="1" width="${w}" height="12" rx="1" fill="${zc(CODE[c])}"><title>${dlabel(dates[dates.length-n+i])}: ${CODE[c]}</title></rect>`).join("")}</svg>`;
 }
 
-const cols = () => [["sym","Stock"],["price","Price"],["zone","Zone","l"],["since",tf==="d"?"Since":"Since week of","l"],["days",P.units[0].toUpperCase()+P.units.slice(1)],["prev","Came from","l"],["entry","Entry price"],["move","Since entry %"],["strip",`Last ${unitsN(period)}`,"l"],
+const cols = () => [["sym","Stock"],["price","Price"],["zone","Zone","l"],["since",tf==="d"?"Since":"Since week of","l"],["days",P.units[0].toUpperCase()+P.units.slice(1)],["prev","Came from","l"],["entry","Entry price"],["move","Since entry %"],["inzone","While in zone %"],["strip",`Last ${unitsN(period)}`,"l"],
   ["rsi","RSI"],["macd_x","MACD","l"],["adx","ADX"],["di","+DI / −DI"],["chop","Chop"],["cloud","Cloud","l"],["stretch",tf==="d"?`vs ${P.ma}-DMA %`:`vs ${P.ma}-WMA %`],
   tf==="d"?["r1d","1D %"]:["r1w","1W %"],["r1m","1M %"]];
 function drawTable(){
   const nf = +document.getElementById("f-new").value, q = document.getElementById("q").value.trim().toUpperCase();
-  let list = base().filter(s => (!zoneF || s.zone===zoneF) && (!nf || (s.since && sessIdx[s.since]!=null && sessIdx[s.since] < nf && s.zone!=="Neutral")));
+  let list = [...base(), ...pastBase()].filter(s => (!zoneF || s.zone===zoneF) && (!nf || (s.since && sessIdx[s.since]!=null && sessIdx[s.since] < nf && s.zone!=="Neutral")));
   if (!zoneF) list = list.filter(s=>ORDER.includes(s.zone));
   if (q) list = list.filter(s => s.sym.includes(q) || s.name.toUpperCase().includes(q));
   list.sort((a,b)=>{ let k=sort.k, x=a[k], y=b[k];
@@ -313,11 +340,12 @@ function drawTable(){
     switch(k){
       case "sym": return `<td class="name"><button class="psym" data-p="${esc(s.sym)}">${esc(s.sym)}</button>${tvLink(s.sym, tf==="w"?"W":"D")}<small>${esc(s.sector)}</small></td>`;
       case "price": return `<td>${fmt(s.price,2)}</td>`;
-      case "zone": return `<td class="l">${chip(s.zone)}${s.new?' <small class="mut">new</small>':''}${s.div?`<small class="mut" style="display:block">${esc(s.div.kind)} lower high</small>`:''}</td>`;
+      case "zone": return `<td class="l">${chip(s.zone)}${s.new?' <small class="mut">new</small>':''}${nowTag(s)}${s.div?`<small class="mut" style="display:block">${esc(s.div.kind)} lower high</small>`:''}</td>`;
       case "since": return `<td class="l">${s.capped ? `<span class="mut">before ${dlabel(D.tf[tf].lb_start)}</span>` : dlabel(s.since)}</td>`;
-      case "days": return `<td>${s.capped ? P.lookback+"+" : s.days}</td>`;
+      case "days": return `<td>${s.capped ? P.lookback+"+" : s.days}${s.past?'<small class="mut" style="display:block">ended</small>':""}</td>`;
       case "entry": return `<td>${fmt(s.entry,2)}</td>`;
       case "move": return sgn(s.move,1);
+      case "inzone": return s.past ? `${sgn(s.inzone,1).replace("</td>", `<small class="mut" style="display:block">exit ₹${fmt(s.exitPx,2)}</small></td>`)}` : sgn(s.inzone,1);
       case "prev": return `<td class="l ${s.prev?'':'mut'}">${esc(s.prev||"–")}</td>`;
       case "strip": return `<td class="l">${strip(s.strip||"")}</td>`;
       case "rsi": return `<td class="${s.rsi>=70?'down':s.rsi<=30?'up':''}">${fmt(s.rsi,0)}</td>`;
@@ -332,7 +360,7 @@ function drawTable(){
   t.innerHTML = `<thead><tr>${COLS.map(([k,l,c])=>`<th class="${c||''}" data-k="${k}" ${sort.k===k?`aria-sort="${sort.dir>0?'ascending':'descending'}"`:''}>${l}</th>`).join("")}</tr></thead><tbody>${
     !shown.length ? `<tr><td class="empty" colspan="${COLS.length}">No stocks match these filters. Try “Entered any time” or untick “Liquid only”.</td></tr>`
     : grouped ? groupRows(shown, COLS, cell, !!q)
-    : shown.map(s=>`<tr class="${s.sym===hl?'hl':''}">${COLS.map(([k])=>cell(s,k)).join("")}</tr>`).join("") + (false ? `<tr><td class="empty" colspan="${COLS.length}">` : "")}</tbody>`;
+    : shown.map(s=>`<tr class="${s.sym===hl?'hl':''} ${s.past?'gone':''}">${COLS.map(([k])=>cell(s,k)).join("")}</tr>`).join("") + (false ? `<tr><td class="empty" colspan="${COLS.length}">` : "")}</tbody>`;
   t.querySelectorAll("tr.gs button").forEach(b=>b.addEventListener("click",()=>{
     grpOpen.set(b.dataset.g, b.getAttribute("aria-expanded")!=="true"); drawTable(); }));
   t.querySelectorAll("th").forEach(th=>th.addEventListener("click",()=>{ const k=th.dataset.k; if(k==="strip") return;
@@ -344,13 +372,14 @@ function groupRows(list, COLS, cell, forceOpen){
   let html = "";
   zs.forEach(z=>{
     const rows = list.filter(s=>s.zone===z); if (!rows.length) return;
-    html += `<tr class="gz" style="--c:${zc(z)}"><td colspan="${COLS.length}"><span class="gl">${chip(z)} <b>${rows.length}</b> <span class="mut">${rows.length===1?"stock":"stocks"}</span></span></td></tr>`;
+    const nowIn = rows.filter(s=>!s.past).length, gone = rows.length - nowIn;
+    html += `<tr class="gz" style="--c:${zc(z)}"><td colspan="${COLS.length}"><span class="gl">${chip(z)} <b>${nowIn}</b> <span class="mut">${nowIn===1?"stock":"stocks"} now${gone?`, ${gone} moved on`:""}</span></span></td></tr>`;
     const by = new Map();
-    rows.forEach(s=>{ const g = s.capped ? `In this zone since before ${lb}` : `From ${s.prev||"no data"}`; if(!by.has(g)) by.set(g,[]); by.get(g).push(s); });
-    [...by.entries()].sort((a,b)=>b[1].length-a[1].length).forEach(([g,items])=>{
+    rows.forEach(s=>{ const g = s.past ? "Entered, since moved on" : s.capped ? `In this zone since before ${lb}` : `From ${s.prev||"no data"}`; if(!by.has(g)) by.set(g,[]); by.get(g).push(s); });
+    [...by.entries()].sort((a,b)=>(a[0]==="Entered, since moved on")-(b[0]==="Entered, since moved on") || b[1].length-a[1].length).forEach(([g,items])=>{
       const key = z+"|"+g, open = forceOpen || (grpOpen.has(key) ? grpOpen.get(key) : !!zoneF);
       html += `<tr class="gs"><td colspan="${COLS.length}"><button data-g="${esc(key)}" aria-expanded="${open}"><b>${esc(g)}</b><span class="cnt">${items.length}</span></button></td></tr>`;
-      if (open) html += items.map(s=>`<tr class="${s.sym===hl?'hl':''}">${COLS.map(([k])=>cell(s,k)).join("")}</tr>`).join("");
+      if (open) html += items.map(s=>`<tr class="${s.sym===hl?'hl':''} ${s.past?'gone':''}">${COLS.map(([k])=>cell(s,k)).join("")}</tr>`).join("");
     });
   });
   return html;
@@ -369,6 +398,7 @@ fp.addEventListener("change",()=>{ showAll=false; openDays.clear(); drawAll(); }
 document.getElementById("f-new").addEventListener("change",()=>{ showAll=false; drawTable(); });
 document.getElementById("liq").addEventListener("change",()=>{ showAll=false; drawAll(); });
 document.getElementById("grp").addEventListener("change",()=>{ showAll=false; drawTable(); });
+document.getElementById("past").addEventListener("change",()=>{ showAll=false; openDays.clear(); drawAll(); });
 document.getElementById("period").addEventListener("change",e=>{ period=+e.target.value; openDays.clear(); setSub(); drawAll(); });
 document.getElementById("q").addEventListener("input",()=>{ hl=null; showAll=false; drawTable(); });
 document.getElementById("more").addEventListener("click",()=>{ showAll=true; drawTable(); });
