@@ -13,7 +13,7 @@ import time
 import pandas as pd
 
 from src import (analytics, backtest, backtest_page, dashboard, earnings, fib, levels, levels_page, profiles, pwa,
-                 screener_page, setups, setups_page, signals, strength, watchlist_page, zones, zones_page)
+                 screener_page, series, setups, setups_page, signals, strength, watchlist_page, zones, zones_page)
 import json
 from src.config import BENCHMARK, DOCS, NEWS_TOP_MOVERS
 
@@ -92,8 +92,8 @@ def main():
 
     print("   zones (daily + weekly)")
     tick = universe["ticker"].tolist()
-    zd, dates_d, lb_d, hd = zones.build_zones(px["Close"], px["High"], px["Low"], tick, "d", history=True)
-    zw, dates_w, lb_w, hw = zones.build_zones(px["Close"], px["High"], px["Low"], tick, "w", history=True)
+    zd, dates_d, lb_d, hd = zones.build_zones(px["Close"], px["High"], px["Low"], tick, "d", history=True, opens=px.get("Open"))
+    zw, dates_w, lb_w, hw = zones.build_zones(px["Close"], px["High"], px["Low"], tick, "w", history=True, opens=px.get("Open"))
     today = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d")
     asof = px["Close"].index[-1].strftime("%Y-%m-%d")
     partial = bool(dates_w) and dates_w[-1] > today      # this week's Friday hasn't come yet
@@ -150,6 +150,7 @@ def main():
     watchlist_page.render()
     print("   screener")
     sg = signals.build(px, tick, ld, lw, fibs)
+    ser = series.build(px, tick)
     secq = {x["sector"]: x.get("q_w") for x in sectors}
     scr_rows = []
     for s_ in stocks:
@@ -163,14 +164,15 @@ def main():
                          "bucket": u.get("bucket"), "q": secq.get(s_["sector"]), "hi": s_.get("from_high"),
                          "es": bool(u.get("earn_soon"))})
     sg_sym = {tf: {t[:-3]: v for t, v in sg[tf].items()} for tf in ("d", "w")}
-    screener_page.render(clean(scr_rows), clean(sg_sym))
+    ser_sym = {tf: {t[:-3]: v for t, v in ser[tf].items()} for tf in ("d", "w")}
+    screener_page.render(clean(scr_rows), clean(sg_sym), clean(ser_sym))
     pwa.write()
     print("   stock profiles")
     gen = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%d %b %Y, %I:%M %p IST")
     profiles.write(clean(stocks), clean(sectors), clean({"d": zd, "w": zw}), clean({"d": hd, "w": hw}),
                    clean({"d": ld, "w": lw}), fmap, {"d": dates_d, "w": dates_w}, gen,
                    {"partial": partial, "asof": asof}, clean(su), clean(mon),
-                   extra={"rs": rs, "earn": earn, "fib": clean(fibs), "sg": sg})
+                   extra={"rs": rs, "earn": earn, "fib": clean(fibs), "sg": sg, "ser": clean(ser)})
     zones_page.render(clean({"stocks": zrows,
                              "tf": {"d": {"dates": dates_d, "lb_start": lb_d},
                                     "w": {"dates": dates_w, "lb_start": lb_w,
