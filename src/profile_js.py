@@ -120,6 +120,8 @@ const SCR = {
   pdef(m, c){ const d = m._p[c.id]; const o = {}; (d ? d.params : []).forEach(q=>{ o[q.k] = (c.p && c.p[q.k] !== undefined) ? c.p[q.k] : q.d; }); return o; },
   pEvent(m, c){ const o = SCR.pdef(m, c);
     if (["p_newhi","p_newlo","p_vol","p_gap"].includes(c.id)) return true;
+    if (c.id==="p_env") return ["tu","xa","tl","xb"].includes(o.op);
+    if (c.id==="p_pch") return false;
     return ["xa","xb","tb","tr"].includes(o.op); },
   pLabel(m, c, v){ const d = m._p[c.id]; if (!d) return c.id; const o = SCR.pdef(m, c);
     const opq = (d.params.find(q=>q.k==="op")||{}), opl = k => (opq.labels||{})[k] || ({gt:"above",lt:"below",xa:"crossed above",xb:"crossed below"})[k] || k;
@@ -140,9 +142,11 @@ const SCR = {
       case "p_chg": t = `Price ${o.op==="gt"?"up at least":"changed at most"} ${o.x}% over ${o.n} bars`; break;
       case "p_rng": t = `Range within ${o.x}% over ${o.n} bars`; break;
       case "p_st": t = `SuperTrend(${o.set}) ${opl(o.op)}`; break;
+      case "p_pch": t = `Price within ±${o.x}% channel during last ${o.per}`; break;
+      case "p_env": t = `${o.type} ${o.per} ±${o.x}% envelope: ${opl(o.op)}`; break;
       default: t = d.l;
     }
-    return `${c.tf==="w"?"W":"D"}: ${t}${SCR.pEvent(m,c) && v>0 ? ` (${v} ${c.tf==="w"?"wk":"bars"} ago)` : ""}`; },
+    return `${c.tf==="w"?"W":"D"}: ${t}${SCR.pEvent(m,c) && v>0 ? ` (${v} ${c.tf==="w"?"wk":(v===1?"bar":"bars")} ago)` : ""}`; },
   // bars-ago (0 = latest) when the condition holds, else null
   pEval(m, c, ser){
     if (!ser) return null;
@@ -178,6 +182,18 @@ const SCR = {
         if (op==="gt" || op==="lt"){ let k = 0, idx = -1; for (let a=0;a<P.length;a++) for (let b=a+1;b<P.length;b++){ if (P[a]===f && P[b]===sl) idx = k; k++; }
           const bit = (ma.p||"")[(ty==="e"?28:0) + idx]; return (op==="gt" ? bit==="1" : bit==="0") ? 0 : null; }
         const a = (ma.e||{})[`${op==="xa"?"ca":"cb"}_${ty}${f}_${ty}${sl}`]; return a!=null && a < n ? a : null; }
+      case "p_pch": { const v = (ser.pch||{})[o.per]; return v!=null && v <= X*10 ? 0 : null; }
+      case "p_env": { const e = (ser.env||{})[`${o.type==="EMA"?"e":"s"}${o.per}`]; if (!e) return null;
+        const [cl, hi, lo] = e, U = X*10, Lw = -X*10, Lc = cl.length - 1;
+        if (o.op==="ab") return cl[Lc]!=null && cl[Lc] > U ? 0 : null;
+        if (o.op==="bl") return cl[Lc]!=null && cl[Lc] < Lw ? 0 : null;
+        if (o.op==="in") return cl[Lc]!=null && cl[Lc] <= U && cl[Lc] >= Lw ? 0 : null;
+        for (let b=0; b<n && Lc-b>=1; b++){ const i = Lc-b;
+          if (o.op==="tu" && hi[i]!=null && hi[i] >= U && cl[i] <= U) return b;
+          if (o.op==="tl" && lo[i]!=null && lo[i] <= Lw && cl[i] >= Lw) return b;
+          if (o.op==="xa" && cl[i]!=null && cl[i-1]!=null && cl[i] > U && cl[i-1] <= U) return b;
+          if (o.op==="xb" && cl[i]!=null && cl[i-1]!=null && cl[i] < Lw && cl[i-1] >= Lw) return b; }
+        return null; }
       case "p_st": { const st = (ser.st||{})[o.set]; if (!st) return null; const L = st.length - 1;
         if (o.op==="bull") return st[L]==="1" ? 0 : null; if (o.op==="bear") return st[L]==="0" ? 0 : null;
         for (let b=0; b<n && L-b>=1; b++){ const a1 = st[L-b], a0 = st[L-b-1];
@@ -185,8 +201,9 @@ const SCR = {
         return null; }
     }
     return null; },
+  lvl(r, c){ const v = (((r.sig||{})[c.tf]||{})._v||{})[c.id]; return v ? ` · ${String(c.id).startsWith("tl_")?"line":"level"} ₹${Number(v).toLocaleString("en-IN",{maximumFractionDigits:2})}` : ""; },
   label(m, c, v){ if (SCR.isP(c)) return SCR.pLabel(m, c, v); const x = m._by[c.id]; if (!x) return c.id;
-    return `${c.tf==="w"?"W":"D"}: ${x.l}${x.k==="e" && v>0 ? ` (${v} ${c.tf==="w"?"wk":"bars"} ago)` : ""}`; },
+    return `${c.tf==="w"?"W":"D"}: ${x.l}${x.k==="e" && v>0 ? ` (${v} ${c.tf==="w"?"wk":(v===1?"bar":"bars")} ago)` : ""}`; },
   hits(screen, r, m){
     m = m || SCR._m; if (!m) return null;
     const f = screen.f || {};
@@ -205,7 +222,7 @@ const SCR = {
       let v, ok;
       if (SCR.isP(c)){ v = SCR.pEval(m, c, (r.ser||{})[c.tf]); ok = v != null; }
       else { const x = m._by[c.id]; v = ((r.sig||{})[c.tf]||{})[c.id]; ok = x && v != null && (x.k === "s" || v < (c.n || 1)); }
-      if (ok){ n++; out.push(SCR.label(m, c, v)); }
+      if (ok){ n++; out.push(SCR.label(m, c, v) + (SCR.isP(c) ? "" : SCR.lvl(r, c))); }
       else if ((screen.mode||"all") === "all") return null;
     }
     if ((screen.conds||[]).length && !n) return null;
@@ -360,7 +377,7 @@ function screenerBlock(p, tf){
   const m = SCR._m; if (!m || !p.sg) return "";
   const sig = p.sg[tf] || {}, by = m._by;
   const groups = {};
-  Object.entries(sig).forEach(([id,v])=>{ const x = by[id]; if (!x) return; (groups[x.g] ??= []).push(SCR.label(m, {id, tf}, v).replace(/^[DW]: /,"")); });
+  Object.entries(sig).forEach(([id,v])=>{ const x = by[id]; if (!x) return; (groups[x.g] ??= []).push(SCR.label(m, {id, tf}, v).replace(/^[DW]: /,"") + SCR.lvl({sig:p.sg}, {id, tf})); });
   const r = {zd:(p.z.d||{}).zone, zw:(p.z.w||{}).zone, bucket:(p.su||{}).bucket, rs:p.rs, q:(p.sq||{}).w, price:p.px, liquid:p.liq,
              es:(p.su||{}).earn_soon, sector:p.sec, sig:p.sg, ser:p.ser};
   const saved = (WL.get().screens || []).filter(s=>SCR.hits(s, {...r, liquid:true}, m));
@@ -420,7 +437,7 @@ function render(){
       <small>support ${lv.sup?`₹${fmt(lv.sup.p,2)} (−${fmt(lv.sup.d)}%)`:"–"}</small><small>resistance ${lv.res?`₹${fmt(lv.res.p,2)} (+${fmt(lv.res.d)}%)`:"–"}</small></div>
   </div>
 
-  <div class="pf-sec"><h3>Price chart (${tf==="w"?"weekly":"daily"} candles)</h3>${chart(z, lv, dates, tf, (p.fib||{})[tf])}
+  <div class="pf-sec"><h3>Price chart (${tf==="w"?"weekly":"daily"} candles)</h3>${chart(z, lv, dates, tf, (p.fib||{})[tf], {pat: (p.pat||{})[tf]})}
     <div class="pf-key">${["Bullish","Strong momentum","Extended","Divergence zone","Bearish","Oversold","Accumulation","Neutral"].map(k=>`<span><i style="--c:var(${ZC[k]})"></i>${k}</span>`).join("")}</div></div>
 
   ${fibBlock((p.fib||{})[tf], tf, p.px)}
@@ -461,7 +478,7 @@ function render(){
 
 /* ---------- candlestick chart with line studies ---------- */
 const CH_KEY = "azh:chart";
-const chOpts = () => { try { return {zones:true, sr:true, tl:true, fib:true, ma:false, ...JSON.parse(localStorage.getItem(CH_KEY)||"{}")}; } catch(e){ return {zones:true,sr:true,tl:true,fib:true,ma:false}; } };
+const chOpts = () => { try { return {zones:true, sr:true, tl:true, fib:true, ma:false, pat:true, ...JSON.parse(localStorage.getItem(CH_KEY)||"{}")}; } catch(e){ return {zones:true,sr:true,tl:true,fib:true,ma:false,pat:true}; } };
 function chart(z, lv, dates, tf, fb, opt){
   opt = opt || {};
   const host = opt.width || ((dlg && dlg.open && dlg.clientWidth) || 900);
@@ -512,6 +529,16 @@ function chart(z, lv, dates, tf, fb, opt){
     const ia = (n-1) - t.ag, slope = t.ag ? (t.v - t.va)/t.ag : 0, x0 = Math.max(0, ia), y0 = t.va + slope*(x0 - ia);
     const x1 = n - 1 + 3, y1 = t.v + slope*3;
     g += `<line x1="${X(x0).toFixed(1)}" y1="${Y(y0).toFixed(1)}" x2="${Math.min(W-P.r, X(x1)).toFixed(1)}" y2="${Y(y1).toFixed(1)}" stroke="${col}" stroke-width="1.8"><title>${name}: ₹${fmt(t.v,2)} now, ${t.t} touches</title></line>`; });
+  // chart pattern (same lines the screener used)
+  const pgs = Array.isArray(opt.pat) ? opt.pat : (opt.pat ? [opt.pat] : []);
+  if (T.pat) pgs.forEach((pg, pi)=>{
+    const col = ["#7A3FC8","#B5338A","#2C7A8C"][pi % 3];
+    pg.lines.forEach(([a0, v0, a1, v1])=>{ let i0 = (n-1)-a0, i1 = (n-1)-a1; if (i1 < 0) return;
+      let y0 = v0; if (i0 < 0){ y0 = v0 + (v1-v0) * (0 - i0)/(i1 - i0); i0 = 0; }
+      g += `<line x1="${X(i0).toFixed(1)}" y1="${Y(y0).toFixed(1)}" x2="${X(i1).toFixed(1)}" y2="${Y(v1).toFixed(1)}" stroke="${col}" stroke-width="2" stroke-dasharray="7 3"><title>${esc(pg.name)}</title></line>`; });
+    const a = pg.lines[0], ia = Math.max(0, (n-1)-a[0]);
+    g += `<text x="${X(ia)+2}" y="${P.t+12+pi*13}" font-size="11" font-weight="700" fill="${col}">${esc(pg.name)}</text>`;
+  });
   // fibonacci
   if (T.fib && fb){ ["38.2","50","61.8"].forEach(k=>{ const v = fb.lv[k]; if (inR(v))
       g += `<line x1="${P.l}" x2="${W-P.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="#C9780F" stroke-width="1" stroke-dasharray="2 3"/><text x="${P.l+4}" y="${Y(v)-3}" font-size="10" fill="#C9780F">Fib ${k}%</text>`; });
@@ -522,7 +549,7 @@ function chart(z, lv, dates, tf, fb, opt){
   if (dates.length){ [0, Math.floor((n-1)/2), n-1].forEach((i,k)=>{ g += `<text x="${X(i)}" y="${H-7}" font-size="11" fill="var(--muted)" text-anchor="${["start","middle","end"][k]}">${dl(dates[i])}</text>`; }); }
   g += `<line class="cx" x1="0" x2="0" y1="${P.t}" y2="${H-P.b}" stroke="var(--muted)" stroke-dasharray="3 3" visibility="hidden"/>`;
   const btn = (k, label) => `<button type="button" class="pf-btn ${T[k]?'on':''}" data-ct="${k}" aria-pressed="${!!T[k]}" style="padding:3px 9px;font-size:.76rem">${label}</button>`;
-  const html = `<div class="pf-act" style="margin:0 0 6px">${btn("zones","Zones")}${btn("sr","Support / resistance")}${btn("tl","Trendlines")}${btn("fib","Fibonacci")}${btn("ma","MA 20 / 50")}</div>
+  const html = `<div class="pf-act" style="margin:0 0 6px">${btn("zones","Zones")}${btn("sr","Support / resistance")}${btn("tl","Trendlines")}${btn("fib","Fibonacci")}${btn("pat","Pattern")}${btn("ma","MA 20 / 50")}</div>
     <div class="pf-mut" id="${id}-r" style="font-size:.78rem;min-height:1.2em">${cut ? `Latest ${n} bars. ` : ""}Tap or hover a candle for its prices.</div>
     <svg id="${id}" class="pf-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Candlestick chart with support, resistance, trendlines and Fibonacci levels" style="touch-action:pan-y">${g}</svg>`;
   setTimeout(()=>{ const svg = document.getElementById(id); if (!svg) return;

@@ -22,7 +22,7 @@ How it works, per stock and timeframe:
 import numpy as np
 import pandas as pd
 
-from .config import LEVEL_PARAMS, WEEKLY_LIVE
+from .config import LEVEL_PARAMS, SCREENER_EVENT_BARS, WEEKLY_LIVE
 
 BULLISH = ["Breakout", "Trendline breakout", "Retest", "At trendline support", "Near support"]
 BEARISH = ["Breakdown", "Trendline breakdown", "Near resistance"]
@@ -147,7 +147,7 @@ def analyze(c, h, l, v, p):
             break
 
     # trendlines
-    fall = _best_line(ph, h, c, n, tol, R, falling=True)
+    fall = _best_line(ph, h, c, n, tol, SCREENER_EVENT_BARS, falling=True)
     if fall:
         line = fall["line"]
         lv = line[-1]
@@ -157,7 +157,7 @@ def analyze(c, h, l, v, p):
         if broke and price > lv:
             out["sig"].append("Trendline breakout")
             out["tlr"]["vx"] = volx(broke[0]); out["tlr"]["j"] = broke[0]
-    rise = _best_line(pl, l, c, n, tol, R, falling=False)
+    rise = _best_line(pl, l, c, n, tol, SCREENER_EVENT_BARS, falling=False)
     if rise:
         line = rise["line"]
         lv = line[-1]

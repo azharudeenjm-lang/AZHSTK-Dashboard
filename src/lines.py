@@ -39,7 +39,7 @@ import numpy as np
 import pandas as pd
 
 from .config import LEVEL_PARAMS, SCREENER_EVENT_BARS as NB
-from .levels import _cluster, _pivots
+from .levels import _best_line, _cluster, _pivots
 
 TL_META = [
     ("tl_ab_rise", "Above rising trendline", "s"),
@@ -94,42 +94,35 @@ for _dir, _word in (("u", "Upward"), ("d", "Downward")):
             TD_META.append((f"td{_dir}{_lv}q{_q}", f"TD-line level {_lv} {_word.lower()} breakout, qualifier {_q} met", "e"))
 
 
-def _line_through(piv, vals, c, n, tol, side, slope):
-    """Best valid line through two swing points (most touches, then newest)."""
-    piv = [i for i in piv if i < n - 1][-8:]
-    best, end = None, max(0, n - NB)
-    for x in range(len(piv)):
-        for y in range(x + 1, len(piv)):
-            a, b = piv[x], piv[y]
-            va, vb = vals[a], vals[b]
-            if slope == "up" and not vb > va * (1 + tol):
-                continue
-            if slope == "down" and not vb < va * (1 - tol):
-                continue
-            line = va + (vb - va) / (b - a) * (np.arange(n) - a)
-            if line[-1] <= 0:
-                continue
-            seg = slice(a + 1, max(a + 1, end))
-            if side == "res" and np.any(c[seg] > line[seg] * (1 + tol / 2)):
-                continue
-            if side == "sup" and np.any(c[seg] < line[seg] * (1 - tol / 2)):
-                continue
-            touches = sum(1 for i in piv if i >= a and abs(vals[i] - line[i]) <= line[i] * tol)
-            if best is None or (touches, b) > best[0]:
-                best = ((touches, b), line, a)
-    return (best[1], best[2]) if best else None
+def touch_zone(h, l, c, p):
+    """How close a bar's low/high must come to a line to count as a touch:
+    a quarter of the average true range, kept between tol_min/3 and 1.25 x tol_min
+    (about 0.5%-1.9% daily, 0.8%-3.1% weekly)."""
+    tr = np.maximum(h[1:] - l[1:], np.maximum(abs(h[1:] - c[:-1]), abs(l[1:] - c[:-1])))
+    z = 0.25 * np.nanmean(tr[-14:]) / c[-1]
+    return float(min(max(z, p["tol_min"] / 3), p["tol_min"] * 1.25))
 
 
 def _events(c, h, l, L, tt, start):
-    """Event arrays (bool) for one line over all bars from `start`."""
+    """Event arrays (bool) for one line over the bars from `start`.
+
+    crossed above  close moved from at/below the line to above it
+    crossed below  close moved from at/above the line to below it
+    touched above  was above (previous close), low came within the touch zone
+                   of the line, close stayed above
+    touched below  was below, high came within the touch zone, close stayed below
+    bounced up     touched above on the previous bar, then a higher close
+    bounced down   touched below on the previous bar, then a lower close
+    """
     n = len(c)
     e = {k: np.zeros(n, bool) for k in ("xu", "xd", "ta", "tb", "bu", "bd")}
     for t in range(max(start + 1, 1), n):
-        e["xu"][t] = c[t] > L[t] and c[t - 1] <= L[t - 1]
+        above0, above1 = c[t - 1] > L[t - 1], c[t] > L[t]
+        e["xu"][t] = above1 and not above0
         e["xd"][t] = c[t] < L[t] and c[t - 1] >= L[t - 1]
-        e["ta"][t] = l[t] <= L[t] * (1 + tt) and c[t] > L[t]
-        e["tb"][t] = h[t] >= L[t] * (1 - tt) and c[t] < L[t]
-        e["bu"][t] = e["ta"][t - 1] and c[t] > c[t - 1] and c[t] > L[t]
+        e["ta"][t] = above0 and above1 and l[t] <= L[t] * (1 + tt)
+        e["tb"][t] = c[t - 1] < L[t - 1] and c[t] < L[t] and h[t] >= L[t] * (1 - tt)
+        e["bu"][t] = e["ta"][t - 1] and c[t] > c[t - 1] and above1
         e["bd"][t] = e["tb"][t - 1] and c[t] < c[t - 1] and c[t] < L[t]
     return e
 
@@ -187,36 +180,48 @@ def analyze(o, h, l, c, p):
     price = c[-1]
     tr = np.maximum(h[1:] - l[1:], np.maximum(abs(h[1:] - c[:-1]), abs(l[1:] - c[:-1])))
     tol = max(p["tol_min"], 0.5 * tr[-14:].mean() / price)
-    tt = tol / 2                                 # touch zone: half the level tolerance
+    tt = touch_zone(h, l, c, p)
     k = p["pivot"]
     ph, pl = _pivots(h, k, True), _pivots(l, k, False)
     start = n - NB - 1
 
     # ---- trend lines ----
+    # The same two lines the Levels page and the stock chart draw:
+    #   falling trendline = resistance through lower swing highs
+    #   rising trendline  = support through higher swing lows
+    # A line counts only if no close broke it before the screener's window.
+    fall = _best_line(ph, h, c, n, tol, NB, falling=True)
+    rise = _best_line(pl, l, c, n, tol, NB, falling=False)
     lines = {}
-    for name, piv, vals, side, slope in (("res_dn", ph, h, "res", "down"), ("res_up", ph, h, "res", "up"),
-                                          ("sup_up", pl, l, "sup", "up"), ("sup_dn", pl, l, "sup", "down")):
-        r = _line_through(piv, vals, c, n, tol, side, slope)
-        if r:
-            lines[name] = _events(c, h, l, r[0], tt, start), r[0]
-    groups = {"rise": ("res_up", "sup_up"), "fall": ("res_dn", "sup_dn"), "any": ("res_up", "sup_up", "res_dn", "sup_dn")}
-    for g, names in groups.items():
+    if fall:
+        lines["fall"] = (_events(c, h, l, fall["line"], tt, start), fall["line"])
+    if rise:
+        lines["rise"] = (_events(c, h, l, rise["line"], tt, start), rise["line"])
+    vals = {}
+    for g, names in {"rise": ("rise",), "fall": ("fall",), "any": ("rise", "fall")}.items():
         for ev, key in (("xu", "x"), ("xd", "xd"), ("ta", "ta"), ("tb", "tb"), ("bu", "bu"), ("bd", "bd")):
-            agos = [_ago(lines[nm][0][ev]) for nm in names if nm in lines]
-            agos = [a for a in agos if a is not None]
-            if agos:
-                out[f"tl_{key}_{g}"] = min(agos)
-    if "sup_up" in lines and price > lines["sup_up"][1][-1]:
+            best = None
+            for nm in names:
+                if nm in lines:
+                    a_ = _ago(lines[nm][0][ev])
+                    if a_ is not None and (best is None or a_ < best[0]):
+                        best = (a_, lines[nm][1][n - 1 - a_])
+            if best:
+                out[f"tl_{key}_{g}"] = best[0]
+                vals[f"tl_{key}_{g}"] = best[1]
+    if "rise" in lines and price > lines["rise"][1][-1]:
         out["tl_ab_rise"] = 1
-    if "res_dn" in lines and price < lines["res_dn"][1][-1]:
+        vals["tl_ab_rise"] = lines["rise"][1][-1]
+    if "fall" in lines and price < lines["fall"][1][-1]:
         out["tl_bl_fall"] = 1
+        vals["tl_bl_fall"] = lines["fall"][1][-1]
     out.pop("tl_bd_any", None)                   # not in the list (bounced down from any line)
 
     # ---- support / resistance ----
     hi_set = set(ph)
     pts = [(h[i], i) for i in ph] + [(l[i], i) for i in pl]
     for lev, touches, last in _cluster(pts, tol):
-        if not (0.85 * price <= lev <= 1.15 * price):
+        if not (0.9 * price <= lev <= 1.1 * price):     # only levels within 10% of price
             continue
         members = [i for v, i in pts if abs(v / lev - 1) <= tol]
         kind = "res" if sum(1 for i in members if i in hi_set) * 2 >= len(members) else "sup"
@@ -226,28 +231,34 @@ def analyze(o, h, l, c, p):
             a = _ago(e[ev])
             if a is not None:
                 kk = f"sr_{key}_{kind}"
-                out[kk] = min(out.get(kk, 99), a)
+                if a < out.get(kk, 99):
+                    out[kk], vals[kk] = a, lev
         for ev, key in (("ta", "ta"), ("tb", "tb")):
             hits = [t for t in range(n - NB, n) if e[ev][t]]
             sep = [t for i, t in enumerate(hits) if i == 0 or t - hits[i - 1] >= 2]
             for times in (2, 3):
                 if len(sep) >= times:
                     kk = f"sr_{times}{key}_{kind}"
-                    out[kk] = min(out.get(kk, 99), n - 1 - sep[-1])
+                    if n - 1 - sep[-1] < out.get(kk, 99):
+                        out[kk], vals[kk] = n - 1 - sep[-1], lev
         # traps
         for t in range(max(start + 1, 1), n):
             if kind == "res" and e["xu"][t]:
                 back = next((u for u in range(t + 1, min(n, t + 6)) if c[u] < lev), None)
-                if back is not None:
-                    out["bull_trap"] = min(out.get("bull_trap", 99), n - 1 - back)
+                if back is not None and n - 1 - back < out.get("bull_trap", 99):
+                    out["bull_trap"], vals["bull_trap"] = n - 1 - back, lev
             if kind == "sup" and e["xd"][t]:
                 back = next((u for u in range(t + 1, min(n, t + 6)) if c[u] > lev), None)
-                if back is not None:
-                    out["bear_trap"] = min(out.get("bear_trap", 99), n - 1 - back)
+                if back is not None and n - 1 - back < out.get("bear_trap", 99):
+                    out["bear_trap"], vals["bear_trap"] = n - 1 - back, lev
 
     # ---- DeMark TD lines ----
     _td(o, h, l, c, out)
-    return {kk: v for kk, v in out.items() if v != 99}
+    out = {kk: v for kk, v in out.items() if v != 99}
+    lv = {kk: float(f"{v:.4g}") for kk, v in vals.items() if kk in out and np.isfinite(v)}
+    if lv:
+        out["_v"] = lv                            # the line/level price behind each signal
+    return out
 
 
 def build_tf(o, h, l, c, tf):

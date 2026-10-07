@@ -23,6 +23,10 @@ MA_P = [5, 10, 20, 30, 50, 100, 150, 200]
 CHG_N = [1, 5, 10, 20, 60, 120, 250]
 RNG_N = [5, 10, 15, 20, 26, 30]
 ST_P = [(7, 3), (10, 2), (10, 3), (14, 2)]
+ENV_P = [20, 50, 200]
+# percent channel periods: label -> bars (daily, weekly); None = not available on that timeframe
+PCH = {"1 week": (5, None), "2 weeks": (10, 2), "1 month": (21, 4), "3 months": (63, 13),
+       "6 months": (126, 26), "1 year": (250, 52)}
 K = NB + 1
 
 G = "Indicators (your numbers)"
@@ -72,6 +76,17 @@ PMETA = [
     {"id": "p_rng", "g": G, "l": "Tight range: high-to-low within X% over N bars", "params": [
         {"k": "n", "t": "sel", "o": RNG_N, "d": 10, "lab": "bars"},
         {"k": "x", "t": "num", "d": 6, "lab": "%"}]},
+    {"id": "p_pch", "g": G, "l": "Percent channel: price within ±X% over a period", "params": [
+        {"k": "x", "t": "num", "d": 5, "lab": "±%"},
+        {"k": "per", "t": "sel", "o": list(PCH), "d": "1 month", "lab": "during last"}]},
+    {"id": "p_env", "g": G, "l": "Moving-average envelope", "params": [
+        {"k": "type", "t": "sel", "o": ["SMA", "EMA"], "d": "EMA", "lab": ""},
+        {"k": "per", "t": "sel", "o": ENV_P, "d": 50, "lab": "period"},
+        {"k": "x", "t": "num", "d": 10, "lab": "± %"},
+        {"k": "op", "t": "op", "o": ["tu", "xa", "ab", "tl", "xb", "bl", "in"], "d": "tu",
+         "labels": {"tu": "touched upper band", "xa": "crossed above upper band", "ab": "closed above upper band",
+                    "tl": "touched lower band", "xb": "crossed below lower band", "bl": "closed below lower band",
+                    "in": "inside the envelope"}}]},
     {"id": "p_st", "g": G, "l": "SuperTrend", "params": [
         {"k": "set", "t": "sel", "o": [f"{a},{b}" for a, b in ST_P], "d": "10,3", "lab": "(period, multiplier)"},
         {"k": "op", "t": "op", "o": ["bull", "bear", "tb", "tr"], "d": "tb",
@@ -211,6 +226,23 @@ def build_tf(o, h, l, c, v, tf):
                             ma["e"][f"{key}_{typ}{f}_{typ}{sl}"] = a
         s["ma"] = ma
         s["st"] = {f"{a},{b}": _st_state(H[:, j], L[:, j], C[:, j], a, b) for a, b in ST_P}
+        # percent channels: half-range of closes around their midpoint, in %, per period
+        s["pch"] = {}
+        for lab, (nd, nw) in PCH.items():
+            nb = nd if tf == "d" else nw
+            if nb:
+                cs = c[t].tail(nb)
+                if cs.notna().sum() >= nb * 0.8:
+                    hi, lo = cs.max(), cs.min()
+                    s["pch"][lab] = _i10((hi - lo) / (hi + lo) * 100)
+        # envelopes: % distance of close / high / low from each moving average
+        env = {}
+        for typ, src in (("s", sma), ("e", ema)):
+            for p_ in ENV_P:
+                m_ = src[p_][t]
+                env[f"{typ}{p_}"] = [_tail((c / src[p_] - 1) * 100, t), _tail((h / src[p_] - 1) * 100, t),
+                                      _tail((l / src[p_] - 1) * 100, t)]
+        s["env"] = env
         out[t] = s
     return out
 

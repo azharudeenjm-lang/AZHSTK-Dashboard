@@ -168,3 +168,26 @@ def patch(out, benchmark, days=None, session=None):
     for f in out:
         out[f] = out[f].astype(float)
     return filled
+
+
+def price_bands():
+    """{symbol: daily price band %} from NSE's security list (circuit limits).
+    Stocks with "No Band" (most F&O stocks) are left out."""
+    cache = DIR / "sec_list.csv"
+    session = requests.Session()
+    session.headers.update(HEAD)
+    raw = _get(session, "/content/equities/sec_list.csv")
+    if raw:
+        DIR.mkdir(parents=True, exist_ok=True)
+        cache.write_bytes(raw)
+    elif cache.exists():
+        raw = cache.read_bytes()
+    if not raw:
+        print("  circuit bands: NSE list not available")
+        return {}
+    df = pd.read_csv(io.BytesIO(raw))
+    df.columns = [c.strip().lower() for c in df.columns]
+    band = pd.to_numeric(df["band"].astype(str).str.strip(), errors="coerce")
+    out = {str(s).strip(): float(b) for s, b in zip(df["symbol"], band) if pd.notna(b) and b > 0}
+    print(f"  circuit bands: {len(out)} stocks")
+    return out

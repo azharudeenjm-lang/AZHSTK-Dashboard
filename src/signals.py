@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 from .config import SCREENER_EVENT_BARS as NB, WEEKLY_LIVE
-from . import lines
+from . import lines, patterns
 
 # id, group, label, kind ("s" state / "e" event)
 META = [
@@ -92,6 +92,8 @@ META = [
 META += [(i, "Trend lines", l, k) for i, l, k in lines.TL_META]
 META += [(i, "Support and resistance", l, k) for i, l, k in lines.SR_META]
 META += [(i, "DeMark TD lines", l, k) for i, l, k in lines.TD_META]
+META += [(i, "Bands and channels", l, k) for i, l, k in patterns.BAND_META]
+META += [(i, "Chart patterns", l, k) for i, l, k in patterns.PAT_META]
 
 LVMAP = {"Breakout": "lv_brk", "Trendline breakout": "lv_tlb", "Retest": "lv_ret",
          "At trendline support": "lv_tls", "Near support": "lv_sup", "Near resistance": "lv_res",
@@ -186,8 +188,11 @@ def _divergence(c, rsi, macd, k, bull):
     return pd.Series(out, index=c.columns)
 
 
-def build(px, tickers, ld, lw, fibs):
-    """Returns {"d": {ticker: {cond: value}}, "w": {...}} with only true conditions."""
+def build(px, tickers, ld, lw, fibs, circuit=None):
+    """Returns {"d": {ticker: {cond: value}}, "w": {...}} with only true conditions.
+
+    Each stock's chart-pattern geometry (for drawing) is stored under "_g".
+    circuit: optional {symbol: price band %} from NSE, for circuit-limit hits."""
     cols = [t for t in tickers if t in px["Close"].columns]
     res = {}
     for tf in ("d", "w"):
@@ -282,8 +287,9 @@ def build(px, tickers, ld, lw, fibs):
         o2, c2 = o.shift(2), c.shift(2)
         E["mstar"] = ((c2 < o2) & ((o2 - c2) >= 0.6 * (h.shift(2) - l.shift(2)))
                       & ((c.shift() - o.shift()).abs() <= 0.3 * (o2 - c2)) & (c > o) & (c > (o2 + c2) / 2))
+        patterns.add_bands(S, E, o, h, l, c, tf, circuit)
         # assemble
-        ago = {k: _ago(e.fillna(False)) for k, e in E.items()}
+        ago = {k: _ago(e.fillna(False).astype(bool)) for k, e in E.items()}
         ago["st_flip"] = flip
         k_piv = 5 if tf == "d" else 3
         ago["bull_div"] = _divergence(c, rsi, macd, k_piv, True)
@@ -316,14 +322,22 @@ def build(px, tickers, ld, lw, fibs):
                         continue
                     for back in range(len(lows)):
                         i = len(lows) - 1 - back
-                        if lows[i] <= L * 1.01 and closes[i] > L and (i == 0 or closes[i] > closes[i - 1]):
+                        if i > 0 and lows[i] <= L * 1.01 and closes[i] > L and closes[i - 1] > L and closes[i] > closes[i - 1]:
                             row[key] = back
                             break
             if row:
                 out[t] = row
         extra = lines.build_tf(o, h, l, c, tf)
-        for t, r in extra.items():
-            out.setdefault(t, {}).update(r)
+        prow, pgeo = patterns.build_tf(o, h, l, c, tf, None)
+        for src in (extra, prow):
+            for t, r in src.items():
+                row = out.setdefault(t, {})
+                v = r.pop("_v", None)
+                row.update(r)
+                if v:
+                    row.setdefault("_v", {}).update(v)
+        for t, g in pgeo.items():
+            out.setdefault(t, {})["_g"] = g
         res[tf] = out
         print(f"  screener signals ({tf}): {len(out)} stocks")
     return res

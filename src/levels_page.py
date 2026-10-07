@@ -269,7 +269,7 @@ function drawTable(){
     Promise.all([window.AZH_STOCK(sym), window.AZH_INDEX()]).then(([p, idx])=>{
       const el = document.getElementById("bigc");
       if (!el || openSym!==sym || tf!==t0 || !p || !p.z || !p.z[tf]) return;
-      el.innerHTML = window.AZH_CHART(p.z[tf], s, (idx.dates||{})[tf]||[], tf, (p.fib||{})[tf], {width: Math.min(1000, el.parentElement.clientWidth), bare:true, redraw: drawTable});
+      el.innerHTML = window.AZH_CHART(p.z[tf], s, (idx.dates||{})[tf]||[], tf, (p.fib||{})[tf], {pat:(p.pat||{})[tf], width: Math.min(1000, el.parentElement.clientWidth), bare:true, redraw: drawTable});
     }).catch(()=>{});
   }
 }
