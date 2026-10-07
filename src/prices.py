@@ -75,15 +75,25 @@ def fetch_prices(tickers, benchmark):
         df = df.loc[:, ~df.columns.duplicated()]
         df.index = pd.to_datetime(df.index).tz_localize(None)
         out[f] = df
-    # Drop "ghost" days: Yahoo sometimes adds a row for a market holiday
-    # (e.g. 2 Oct) for only a few tickers. That row leaves every other stock
-    # with a blank last price, which empties the whole dashboard.
+    # Yahoo is often a day late for NSE: fill the latest trading days from
+    # NSE's official end-of-day files before judging which days are complete.
+    try:
+        from .nse_eod import patch
+        patch(out, benchmark)
+    except Exception as e:
+        print(f"  ! NSE end-of-day files not used: {str(e)[:100]}")
+    # Drop "ghost" days: a row that only a few tickers have (e.g. a holiday row
+    # from Yahoo, or a day neither Yahoo nor NSE has fully yet). Such a row
+    # leaves every other stock with a blank last price.
     cnt = out["Close"].notna().sum(axis=1)
     real = cnt >= 0.5 * cnt.max()
     if (~real).any():
         print("  dropped sparse days:", ", ".join(d.strftime("%d %b %Y") for d in cnt.index[~real]))
         for f in FIELDS:
             out[f] = out[f][real]
+    last = out["Close"].index[-1]
+    print(f"  latest trading day in the data: {last:%a %d %b %Y} "
+          f"({int(out['Close'].loc[last].notna().sum())} stocks)")
     cols = out["Close"].columns
     CACHE.mkdir(parents=True, exist_ok=True)
     for f in FIELDS:

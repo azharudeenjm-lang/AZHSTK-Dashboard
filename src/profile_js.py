@@ -220,7 +220,8 @@ function mountRegime(){
     const col = {"Risk-on":"--pq-lead","Neutral":"--pq-weak","Risk-off":"--pq-lag"}[g.state] || "--pz-neu";
     const msg = {"Risk-on":"breakouts tend to follow through","Neutral":"be selective, favour leading sectors","Risk-off":"most breakouts fail; Setups are stricter"}[g.state] || "";
     const el = document.createElement("div"); el.className = "regime"; el.style.setProperty("--c", `var(${col})`);
-    el.innerHTML = `<b>Market: ${esc(g.state)}</b><span class="pf-mut">${esc(msg)}</span>
+    const pd_ = g.asof ? new Date(g.asof+"T00:00:00").toLocaleDateString("en-IN",{weekday:"short",day:"2-digit",month:"short"}) : "";
+    el.innerHTML = `<b>Market: ${esc(g.state)}</b><span class="pf-mut">${esc(msg)}</span>${pd_?`<span style="margin-left:auto;font-size:.82rem">Prices: close of <b>${esc(pd_)}</b></span>`:""}
       <details><summary>Why</summary><ul>${g.items.map(i=>`<li>${i.ok?"✓":i.bad?"✗":"~"} ${esc(i.t)}</li>`).join("")}</ul></details>`;
     head.insertAdjacentElement("afterend", el); }).catch(()=>{});
 }
