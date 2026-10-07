@@ -149,7 +149,15 @@ def main():
     setups_page.render(clean({"stocks": srows, "regime": reg}))
     watchlist_page.render()
     print("   screener")
-    sg = signals.build(px, tick, ld, lw, fibs)
+    circuit = {}
+    if not a.demo:
+        try:
+            from src.nse_eod import price_bands
+            circuit = price_bands()
+        except Exception as e:
+            print(f"  ! circuit bands not loaded: {str(e)[:80]}")
+    sg = signals.build(px, tick, ld, lw, fibs, circuit)
+    geo = {tf: {t: r.pop("_g") for t, r in sg[tf].items() if "_g" in r} for tf in ("d", "w")}
     ser = series.build(px, tick)
     secq = {x["sector"]: x.get("q_w") for x in sectors}
     scr_rows = []
@@ -172,7 +180,7 @@ def main():
     profiles.write(clean(stocks), clean(sectors), clean({"d": zd, "w": zw}), clean({"d": hd, "w": hw}),
                    clean({"d": ld, "w": lw}), fmap, {"d": dates_d, "w": dates_w}, gen,
                    {"partial": partial, "asof": asof}, clean(su), clean(mon),
-                   extra={"rs": rs, "earn": earn, "fib": clean(fibs), "sg": sg, "ser": clean(ser)})
+                   extra={"rs": rs, "earn": earn, "fib": clean(fibs), "sg": sg, "ser": clean(ser), "geo": clean(geo)})
     zones_page.render(clean({"stocks": zrows,
                              "tf": {"d": {"dates": dates_d, "lb_start": lb_d},
                                     "w": {"dates": dates_w, "lb_start": lb_w,
