@@ -159,6 +159,7 @@ def build_tf(o, h, l, c, v, tf):
     adx = _w(100 * (pdi - mdi).abs() / (pdi + mdi).replace(0, np.nan), 14)
     macd = c.ewm(span=12, adjust=False).mean() - c.ewm(span=26, adjust=False).mean()
     msig = macd.ewm(span=9, adjust=False).mean()
+    mh = macd - msig
     av = v.rolling(20, min_periods=10).mean().shift().replace(0, np.nan)
     vx = (v / av) * np.sign(c.diff()).replace(0, 1)
     gap = (l / h.shift().replace(0, np.nan) - 1) * 100
@@ -167,6 +168,13 @@ def build_tf(o, h, l, c, v, tf):
     hi52 = (1 - c / h.rolling(52 * per, min_periods=int(52 * per * 0.8)).max()) * 100
     sma = {p: c.rolling(p, min_periods=p).mean() for p in MA_P}
     ema = {p: c.ewm(span=p, adjust=False, min_periods=p).mean() for p in MA_P}
+
+    # envelope distances (% of close / high / low from each average), computed once for all stocks
+    envf = {}
+    for typ, src in (("s", sma), ("e", ema)):
+        for p_ in ENV_P:
+            m_ = src[p_].tail(K + 1)
+            envf[f"{typ}{p_}"] = [(x.tail(K + 1) / m_ - 1) * 100 for x in (c, h, l)]
 
     def cross_ago(a, b, t, up=True):
         x, y = a[t].tail(K).to_numpy(), b[t].tail(K).to_numpy()
@@ -186,7 +194,7 @@ def build_tf(o, h, l, c, v, tf):
         s = {"rsi": {str(p): _tail(rsi[p], t) for p in RSI_P},
              "chop": {str(p): _tail(chop[p], t) for p in CHOP_P},
              "adx": _tail(adx, t), "pdi": _tail(pdi, t), "mdi": _tail(mdi, t),
-             "macd": _tail(macd, t, _sig4), "msig": _tail(msig, t, _sig4), "mh": _tail(macd - msig, t, _sig4),
+             "macd": _tail(macd, t, _sig4), "msig": _tail(msig, t, _sig4), "mh": _tail(mh, t, _sig4),
              "vx": _tail(vx, t), "gap": _tail(gap, t),
              "chg": {str(n): _i10(chg[n][t].iloc[-1]) for n in CHG_N},
              "rng": {str(n): _i10(rng[n][t].iloc[-1]) for n in RNG_N},
@@ -236,13 +244,7 @@ def build_tf(o, h, l, c, v, tf):
                     hi, lo = cs.max(), cs.min()
                     s["pch"][lab] = _i10((hi - lo) / (hi + lo) * 100)
         # envelopes: % distance of close / high / low from each moving average
-        env = {}
-        for typ, src in (("s", sma), ("e", ema)):
-            for p_ in ENV_P:
-                m_ = src[p_][t]
-                env[f"{typ}{p_}"] = [_tail((c / src[p_] - 1) * 100, t), _tail((h / src[p_] - 1) * 100, t),
-                                      _tail((l / src[p_] - 1) * 100, t)]
-        s["env"] = env
+        s["env"] = {k_: [_tail(f3[0], t), _tail(f3[1], t), _tail(f3[2], t)] for k_, f3 in envf.items()}
         out[t] = s
     return out
 
