@@ -245,7 +245,9 @@ def analyse(h, l, c, tf):
             tgt, inv = v[7] + ln(5, 6), v[0]
     geo = {"d": d, "s": state, "pts": [[int(n - 1 - i), float(f"{x:.4g}"), LABELS[j]] for j, (i, x) in enumerate(zip(ix, v))],
            "tg": float(f"{tgt:.4g}") if tgt is not None and np.isfinite(tgt) and tgt > 0 else None,
-           "iv": float(f"{inv:.4g}") if inv is not None and np.isfinite(inv) else None}
+           "iv": float(f"{inv:.4g}") if inv is not None and np.isfinite(inv) else None,
+           # which side of the invalidation level proves the count wrong
+           "ivs": ("above" if lab in ("A", "B") else "below") if up else ("below" if lab in ("A", "B") else "above")}
     lv = {k: float(f"{x:.4g}") for k, x in lv.items() if k in out and np.isfinite(x)}
     return out, lv, geo
 

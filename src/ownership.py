@@ -216,6 +216,8 @@ def build(stocks, dates_d, dates_w, prices=None, fetch=True, demo=False):
         deals = _load("deals", [])
         surv = _load("surv", {})
         dlv = _load("dlv", {})
+        if not fetch and not F["pit"].exists() and not F["pledge"].exists():
+            fetch = True                   # nothing cached yet (first run): fetch once even on an intraday run
         if fetch:
             api = NSE()
             names = {_norm(n): s for s, n in stocks}

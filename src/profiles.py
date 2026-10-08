@@ -84,3 +84,46 @@ def write(stocks, sectors, zones, hists, lvls, fund, dates, generated, live=None
     for k, v in shards.items():
         (DOCS / "p" / f"{k}.json").write_text(dump(v), encoding="utf-8")
     (DOCS / "profile.js").write_text(PROFILE_JS, encoding="utf-8")
+
+
+LONG_EXTRA = {"d": 380, "w": 156}     # older bars kept for zooming out (about 2 years daily, 5 years weekly in total)
+
+
+def write_long(px, tickers, dates):
+    """docs/px/<shard>.json: older OHLC bars (before the pop-up chart window), loaded only
+    when the chart is zoomed out. dates: {"d": [...], "w": [...]} of the normal chart window."""
+    import numpy as np
+    import pandas as pd
+    from .zones import weekly_bars
+    cols = [t for t in tickers if t in px["Close"].columns]
+    frames = {}
+    c, h, l, o = (px[f][cols] for f in ("Close", "High", "Low", "Open"))
+    frames["d"] = (o, h, l, c)
+    wc, wh, wl = weekly_bars(c, h, l)
+    wo = o.resample("W-FRI").first().reindex(wc.index)
+    frames["w"] = (wo, wh, wl, wc)
+    out_dates, cut = {}, {}
+    for tf, (fo, fh, fl, fc) in frames.items():
+        if not dates.get(tf):
+            continue
+        first = pd.Timestamp(dates[tf][0])
+        idx = fc.index[fc.index < first][-LONG_EXTRA[tf]:]
+        out_dates[tf] = [d.strftime("%Y-%m-%d") for d in idx]
+        cut[tf] = [x.reindex(idx) for x in (fo, fh, fl, fc)]
+    shards = defaultdict(dict)
+    for t in cols:
+        sym = t[:-3]
+        rec = {}
+        for tf, arrs in cut.items():
+            vals = []
+            for a in arrs:
+                v = a[t].to_numpy(float)
+                vals.append([None if np.isnan(x) else float(f"{x:.4g}") for x in v])
+            if any(x is not None for x in vals[3]):
+                rec[tf] = vals
+        if rec:
+            shards[_shard(sym)][sym] = rec
+    (DOCS / "px").mkdir(parents=True, exist_ok=True)
+    dump = lambda o: json.dumps(o, separators=(",", ":"), allow_nan=False)
+    for k, v in shards.items():
+        (DOCS / "px" / f"{k}.json").write_text(dump({"dates": out_dates, "s": v}), encoding="utf-8")

@@ -330,7 +330,77 @@ function actions(s){
   const d = WL.get(), w = !!d.watch[s], open = d.trades.find(t=>t.sym===s && !t.closed);
   return `<button class="pf-btn ${w?'on':''}" data-a="watch">${w?"★ Watching":"☆ Watch"}</button>
     <button class="pf-btn" data-a="trade">${open?"Edit trade":"+ Track trade"}</button>
-    <a class="pf-btn" href="watchlist.html" style="text-decoration:none">My list</a>`;
+    <a class="pf-btn" href="watchlist.html" style="text-decoration:none">My list</a>
+    <button class="pf-btn" data-a="share" aria-expanded="${shareOpen}" title="Share or copy this stock">⤴ Share</button>
+    ${shareOpen ? `<div class="pf-share" style="flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px;padding:8px;border:1px solid var(--line);border-radius:10px">
+      <button class="pf-btn" data-a="shimg">🖼 Picture</button><button class="pf-btn" data-a="shtxt">📋 Copy text</button><button class="pf-btn" data-a="shlink">🔗 Copy link</button>
+      <span class="pf-mut" id="pf-shmsg" role="status" style="font-size:.8rem">Picture: chart, zones and fundamentals as an image. Text: a WhatsApp-ready summary.</span></div>` : ""}`;
+}
+let shareOpen = false;
+const stockLink = s => `${location.origin}${location.pathname.replace(/[^/]*$/,"")}index.html#stock=${encodeURIComponent(s)}`;
+function shareText(p, s, tf){
+  const z = (p.z||{}), lv = (p.lv||{})[tf] || {}, f = p.fu || {}, ew = (p.ew||{})[tf], su = p.su || {};
+  const T = tf==="w" ? "Weekly" : "Daily", L = [];
+  L.push(`*${s}* · ${p.n||""}`);
+  L.push(`₹${fmt(p.px,2)} (${p.r1d>0?"+":""}${fmt(p.r1d,2)}% today) · ${p.sec||""}`);
+  L.push(`Zones: weekly *${(z.w||{}).zone||"–"}*, daily *${(z.d||{}).zone||"–"}*`);
+  if (su.bucket) L.push(`Setup: *${su.bucket}*${su.why?` – ${su.why}`:""}${su.stop?` (stop ₹${fmt(su.stop,2)})`:""}`);
+  if (lv.sup || lv.res) L.push(`${T} support ₹${lv.sup?fmt(lv.sup.p,2):"–"} · resistance ₹${lv.res?fmt(lv.res.p,2):"–"}`);
+  const fb = (p.fib||{})[tf]; if (fb && fb.t && fb.t.length) L.push(`Fibonacci targets: ${fb.t.slice(0,2).map(t=>"₹"+fmt(t.p,2)).join(", ")}`);
+  if (ew && ew.s) L.push(`Elliott (${T.toLowerCase()}, auto): ${ew.s}${ew.tg?` · target ₹${fmt(ew.tg,2)}`:""}${ew.iv?` · wrong ${ew.ivs||(ew.d==="up"?"below":"above")} ₹${fmt(ew.iv,2)}`:""}`);
+  const fx = [f.qg?`Quality *${f.qg}*`:"", f.pe!=null?`P/E ${fmt(f.pe)}`:"", f.sg!=null?`sales ${f.sg>0?"+":""}${fmt(f.sg)}%`:"", f.pg!=null?`profit ${f.pg>0?"+":""}${fmt(f.pg)}%`:"", f.prom!=null?`promoters ${fmt(f.prom,1)}%`:"", f.plg?`pledged ${fmt(f.plg,1)}%`:""].filter(Boolean);
+  if (fx.length) L.push(fx.join(" · "));
+  (p.al||[]).slice(0,2).forEach(x=>L.push(`${x.m<0?"🔻":x.m>0?"🔺":"•"} ${x.t}`));
+  (p.nw||[]).slice(0,1).forEach(x=>L.push(`📰 ${x.t} (${newsAgo(x.d)})`));
+  if (p.earn) L.push(`Results due ${dl(p.earn)}`);
+  L.push(stockLink(s));
+  return L.join("\n");
+}
+function shMsg(t){ const el = dlg.querySelector("#pf-shmsg"); if (el) el.textContent = t; }
+async function copyText(t){ try { await navigator.clipboard.writeText(t); return true; } catch(e){
+  const ta = document.createElement("textarea"); ta.value = t; ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.select();
+  let ok = false; try { ok = document.execCommand("copy"); } catch(e2){} ta.remove(); return ok; } }
+let H2C = null;
+function loadH2C(){ if (window.html2canvas) return Promise.resolve(window.html2canvas);
+  if (!H2C) H2C = new Promise((res, rej)=>{ const sc = document.createElement("script"); sc.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+    sc.onload = ()=>res(window.html2canvas); sc.onerror = ()=>{ H2C = null; rej(new Error("load")); }; document.head.appendChild(sc); });
+  return H2C; }
+async function sharePicture(p, s, tf){
+  shMsg("Making the picture…");
+  let h2c; try { h2c = await loadH2C(); } catch(e){ shMsg("Couldn't load the picture maker (no internet?). Use Copy text instead."); return; }
+  const root = dlg.querySelector(".pf"), cs = getComputedStyle(root);
+  const resolve = v => v.replace(/var\((--[\w-]+)(?:,\s*([^)]+))?\)/g, (m, name, fb) => (cs.getPropertyValue(name).trim() || (fb||"").trim() || "#888"));
+  const bg = getComputedStyle(dlg).backgroundColor || "#fff";
+  let canvas;
+  try {
+    canvas = await h2c(root, { scale: 2, backgroundColor: bg, useCORS: true, logging: false, windowWidth: root.scrollWidth,
+      height: undefined, scrollY: 0,
+      onclone: doc => {
+        const r = doc.querySelector("dialog .pf") || doc.querySelector(".pf"); if (!r) return;
+        r.style.maxHeight = "none"; r.style.overflow = "visible"; r.scrollTop = 0;
+        const dl_ = r.closest("dialog"); if (dl_){ dl_.style.maxHeight = "none"; dl_.style.overflow = "visible"; dl_.style.position = "absolute"; dl_.style.top = "0"; }
+        r.querySelectorAll(".pf-act, .pf-x, .pf-lk, .pf-share, form, details, [id$='-r'], .pf-trade").forEach(e=>e.remove());
+        r.querySelectorAll(".pf-sec").forEach(sec=>{ const h = (sec.querySelector("h3")||{}).textContent || "";
+          if (!/^(Price chart|Fundamentals)/.test(h.trim())) sec.remove(); });
+        r.querySelectorAll("svg, svg *").forEach(e=>{ for (const at of ["fill","stroke","style","stop-color"]){ const v = e.getAttribute(at); if (v && v.includes("var(")) e.setAttribute(at, resolve(v)); } });
+        const ft = doc.createElement("p"); ft.style.cssText = "font-size:12px;margin:10px 0 0;color:#777";
+        ft.textContent = `AZHSTK dashboard · ${new Date().toLocaleString("en-IN",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})} · for information, not investment advice`;
+        r.appendChild(ft);
+      } });
+  } catch(e){ shMsg("Couldn't make the picture on this device. Use Copy text instead."); return; }
+  const blob = await new Promise(r=>canvas.toBlob(r, "image/png"));
+  if (!blob){ shMsg("Couldn't make the picture. Use Copy text instead."); return; }
+  const file = new File([blob], `${s}-${tf==="w"?"weekly":"daily"}.png`, {type:"image/png"});
+  const text = shareText(p, s, tf);
+  try {
+    if (navigator.canShare && navigator.canShare({files:[file]})){ await navigator.share({files:[file], text, title: s}); shMsg("Shared."); return; }
+  } catch(e){ if (e && e.name === "AbortError"){ shMsg("Share cancelled."); return; } }
+  try {
+    if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write){ await navigator.clipboard.write([new ClipboardItem({"image/png": blob})]);
+      shMsg("Picture copied. Paste it into WhatsApp (Ctrl+V). Use Copy text for the summary."); return; }
+  } catch(e){}
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
+  shMsg("Picture downloaded. Attach it in WhatsApp.");
 }
 function earnWarn(p){
   if (!p.earn) return "";
@@ -362,6 +432,12 @@ function wireActions(){
     const a = b.dataset.a, d = WL.get(), s = curSym;
     if (a==="watch"){ if (d.watch[s]) delete d.watch[s]; else d.watch[s] = {added:new Date().toISOString().slice(0,10)}; WL.save(d); render(); }
     if (a==="trade"){ formOpen = true; render(); }
+    if (a==="share"){ shareOpen = !shareOpen; render(); }
+    if (a==="shtxt"){ const t = shareText(curData, s, curTF==="m"?"w":curTF);
+      if (navigator.share && /Android|iPhone|iPad/i.test(navigator.userAgent)){ navigator.share({text: t}).then(()=>shMsg("Shared.")).catch(()=>copyText(t).then(ok=>shMsg(ok?"Summary copied.":"Couldn't copy."))); }
+      else copyText(t).then(ok=>shMsg(ok ? "Summary copied. Paste it into WhatsApp." : "Couldn't copy on this browser.")); }
+    if (a==="shlink"){ copyText(stockLink(s)).then(ok=>shMsg(ok ? "Link copied." : "Couldn't copy.")); }
+    if (a==="shimg"){ sharePicture(curData, s, curTF==="m"?"w":curTF); }
     if (a==="cancel"){ formOpen = false; render(); }
     if (a==="del"){ d.trades = d.trades.filter(t=>!(t.sym===s && !t.closed)); WL.save(d); formOpen=false; render(); }
   });
@@ -491,7 +567,7 @@ function render(){
       <small>support ${lv.sup?`₹${fmt(lv.sup.p,2)} (−${fmt(lv.sup.d)}%)`:"–"}</small><small>resistance ${lv.res?`₹${fmt(lv.res.p,2)} (+${fmt(lv.res.d)}%)`:"–"}</small></div>
   </div>
 
-  <div class="pf-sec"><h3>Price chart (${tf==="w"?"weekly":"daily"} candles)</h3>${chart(z, lv, dates, tf, (p.fib||{})[tf], {pat: (p.pat||{})[tf], ew: (p.ew||{})[tf]})}
+  <div class="pf-sec"><h3>Price chart (${tf==="w"?"weekly":"daily"} candles)</h3>${chart(z, lv, dates, tf, (p.fib||{})[tf], {pat: (p.pat||{})[tf], ew: (p.ew||{})[tf], sym: s})}
     <div class="pf-key">${["Bullish","Strong momentum","Extended","Divergence zone","Bearish","Oversold","Accumulation","Neutral"].map(k=>`<span><i style="--c:var(${ZC[k]})"></i>${k}</span>`).join("")}</div></div>
 
   ${fibBlock((p.fib||{})[tf], tf, p.px)}
@@ -535,13 +611,25 @@ function chart(z, lv, dates, tf, fb, opt){
   opt = opt || {};
   const host = opt.width || ((dlg && dlg.open && dlg.clientWidth) || 900);
   const W = Math.round(Math.max(340, Math.min(1000, host - 32)));
-  // on a phone, show the latest 60 bars so candles stay readable
-  const keep = W < 600 ? 60 : 1e9, full = (z.c || []).length, cut = Math.max(0, full - keep);
-  const sl = a => (a || []).slice(cut);
-  const c = sl(z.c), n = c.length; if (n<2) return '<p class="pf-mut">No price history.</p>';
-  const o = z.o ? sl(z.o) : c.map((v,i)=>i ? c[i-1] : v), h = z.h ? sl(z.h) : c, l = z.l ? sl(z.l) : c;
-  dates = sl(dates);
   const T = chOpts(), id = "ch" + Math.random().toString(36).slice(2,8);
+  // zoom: number of bars shown; older bars come from px/<shard>.json, loaded on first zoom-out
+  const ZO = tf==="w" ? [["1Y",52],["2Y",104],["3Y",156],["5Y",260]] : [["3M",60],["6M",120],["1Y",250],["2Y",500]];
+  const want = T["z"+tf] || (W < 600 ? ZO[0][1] : ZO[1][1]);
+  let zc = z.c || [], zo = z.o, zh = z.h, zl = z.l, zdates = dates || [], more = false, loading = false;
+  if (want > zc.length && opt.sym){
+    const L = longData(opt.sym, tf);
+    if (L === undefined){ loading = true; loadLong(opt.sym).then(()=>{ if (opt.redraw) opt.redraw(); else if (dlg && dlg.open) render(); }); }
+    else if (L){ const pad = a => a || zc.map(()=>null);
+      zo = [...L.o, ...(zo || zc)]; zh = [...L.h, ...pad(zh)]; zl = [...L.l, ...pad(zl)]; zc = [...L.c, ...zc]; zdates = [...L.dates, ...zdates]; more = true; }
+  }
+  const full = zc.length, cut = Math.max(0, full - want);
+  const sl = a => (a || []).slice(cut);
+  let c = sl(zc); const lead = c.findIndex(v=>v!=null);          // skip bars before the stock listed
+  const cut2 = cut + Math.max(0, lead);
+  const sl2 = a => (a || []).slice(cut2);
+  c = sl2(zc); const n = c.length; if (n<2) return '<p class="pf-mut">No price history.</p>';
+  const o = zo ? sl2(zo) : c.map((v,i)=>i ? c[i-1] : v), h = zh ? sl2(zh) : c, l = zl ? sl2(zl) : c;
+  dates = sl2(zdates);
   const H = Math.round(Math.max(240, W*0.42)), P = {l:6,r:62,t:12,b:24};
   const hv = h.filter(v=>v!=null), lw = l.filter(v=>v!=null);
   if (!hv.length) return '<p class="pf-mut">No price history.</p>';
@@ -565,7 +653,9 @@ function chart(z, lv, dates, tf, fb, opt){
     g += `<path d="${d}" fill="none" stroke="${col}" stroke-width="1.3" opacity=".9"/>`; });
   // candles
   const bw = Math.max(1, Math.min(10, step*0.68));
-  for (let i=0;i<n;i++){ if (c[i]==null || h[i]==null || l[i]==null) continue;
+  if (step < 2.2){ let d="", pen=false; for (let i=0;i<n;i++){ if (c[i]==null){ pen=false; continue; } d += `${pen?"L":"M"}${X(i).toFixed(1)},${Y(c[i]).toFixed(1)}`; pen=true; }
+    g += `<path d="${d}" fill="none" stroke="var(--ink)" stroke-width="1.3"/>`; }
+  else for (let i=0;i<n;i++){ if (c[i]==null || h[i]==null || l[i]==null) continue;
     const op = o[i]!=null ? o[i] : (i ? c[i-1] : c[i]), col = c[i] >= op ? up : dn, x = X(i);
     const yT = Y(Math.max(op,c[i])), yB = Y(Math.min(op,c[i]));
     g += `<line x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${Y(h[i]).toFixed(1)}" y2="${Y(l[i]).toFixed(1)}" stroke="${col}" stroke-width="1"/>`;
@@ -602,7 +692,7 @@ function chart(z, lv, dates, tf, fb, opt){
       const y = Y(v) + (isHigh ? -9 : 17);
       g += `<circle cx="${X(i).toFixed(1)}" cy="${(y-4).toFixed(1)}" r="7.5" fill="var(--card,#fff)" stroke="${col}" stroke-width="1.2"/><text x="${X(i).toFixed(1)}" y="${y.toFixed(1)}" font-size="10" font-weight="700" text-anchor="middle" fill="${col}">${lab==="0"?"·":lab}</text>`; });
     if (inR(ew.tg)) g += `<line x1="${P.l}" x2="${W-P.r}" y1="${Y(ew.tg)}" y2="${Y(ew.tg)}" stroke="${col}" stroke-width="1" stroke-dasharray="10 4"/><text x="${W-P.r+4}" y="${Y(ew.tg)+4}" font-size="10" font-weight="600" fill="${col}">EW ${fmt(ew.tg, ew.tg<100?2:0)}</text>`;
-    if (inR(ew.iv)) g += `<line x1="${P.l}" x2="${W-P.r}" y1="${Y(ew.iv)}" y2="${Y(ew.iv)}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="1 3"/><text x="${(P.l + (W-P.r-P.l)*0.4).toFixed(0)}" y="${Y(ew.iv)+12}" font-size="10" fill="var(--muted)">EW count wrong ${ew.d==="up"?"below":"above"} ${fmt(ew.iv, ew.iv<100?2:0)}</text>`;
+    if (inR(ew.iv)) g += `<line x1="${P.l}" x2="${W-P.r}" y1="${Y(ew.iv)}" y2="${Y(ew.iv)}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="1 3"/><text x="${(P.l + (W-P.r-P.l)*0.4).toFixed(0)}" y="${Y(ew.iv)+12}" font-size="10" fill="var(--muted)">EW count wrong ${ew.ivs||(ew.d==="up"?"below":"above")} ${fmt(ew.iv, ew.iv<100?2:0)}</text>`;
   }
   // fibonacci
   if (T.fib && fb){ ["38.2","50","61.8"].forEach(k=>{ const v = fb.lv[k]; if (inR(v))
@@ -615,8 +705,9 @@ function chart(z, lv, dates, tf, fb, opt){
   g += `<line class="cx" x1="0" x2="0" y1="${P.t}" y2="${H-P.b}" stroke="var(--muted)" stroke-dasharray="3 3" visibility="hidden"/>`;
   const btn = (k, label) => `<button type="button" class="pf-btn ${T[k]?'on':''}" data-ct="${k}" aria-pressed="${!!T[k]}" style="padding:3px 9px;font-size:.76rem">${label}</button>`;
   const html = `<div class="pf-act" style="margin:0 0 6px">${btn("zones","Zones")}${btn("sr","Support / resistance")}${btn("tl","Trendlines")}${btn("fib","Fibonacci")}${btn("pat","Pattern")}${btn("ew","Elliott")}${btn("ma","MA 20 / 50")}</div>
-    ${T.ew && ew && ew.s ? `<div style="font-size:.8rem;margin:0 0 4px"><b style="color:${ew.d==="up"?"#1F6FB2":"#B5338A"}">Elliott (auto count):</b> ${esc(ew.s)}${ew.tg?` · target ₹${fmt(ew.tg,2)}`:""}${ew.iv?` · count is wrong ${ew.d==="up"?"below":"above"} ₹${fmt(ew.iv,2)}`:""}</div>` : ""}
-    <div class="pf-mut" id="${id}-r" style="font-size:.78rem;min-height:1.2em">${cut ? `Latest ${n} bars. ` : ""}Tap or hover a candle for its prices.</div>
+    ${T.ew && ew && ew.s ? `<div style="font-size:.8rem;margin:0 0 4px"><b style="color:${ew.d==="up"?"#1F6FB2":"#B5338A"}">Elliott (auto count):</b> ${esc(ew.s)}${ew.tg?` · target ₹${fmt(ew.tg,2)}`:""}${ew.iv?` · count is wrong ${ew.ivs||(ew.d==="up"?"below":"above")} ₹${fmt(ew.iv,2)}`:""}</div>` : ""}
+    <div class="pf-act" style="margin:0 0 6px" role="group" aria-label="Zoom">${ZO.map(([lab,b])=>`<button type="button" class="pf-btn ${want===b?'on':''}" data-cz="${b}" aria-pressed="${want===b}" style="padding:3px 9px;font-size:.76rem">${lab}</button>`).join("")}</div>
+    <div class="pf-mut" id="${id}-r" style="font-size:.78rem;min-height:1.2em">${loading ? "Loading older prices… " : ""}${n} ${tf==="w"?"weeks":"sessions"} shown${step < 2.2 ? " (closing-price line; zoom in for candles)" : ""}. Tap or hover for prices.</div>
     <svg id="${id}" class="pf-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Candlestick chart with support, resistance, trendlines and Fibonacci levels" style="touch-action:pan-y">${g}</svg>`;
   setTimeout(()=>{ const svg = document.getElementById(id); if (!svg) return;
     const r = document.getElementById(id+"-r"), cx = svg.querySelector(".cx");
@@ -627,12 +718,22 @@ function chart(z, lv, dates, tf, fb, opt){
       r.innerHTML = `<b>${dl(dates[i])}</b> · O ${fmt(o[i],2)} · H ${fmt(h[i],2)} · L ${fmt(l[i],2)} · C ${fmt(c[i],2)}${ch!=null?` (${pct(ch,2)})`:""}`; };
     svg.addEventListener("pointermove", show); svg.addEventListener("pointerdown", show);
     const wrap = svg.parentElement;
+    wrap.querySelectorAll("[data-cz]").forEach(b=>b.onclick=()=>{ const t = chOpts(); t["z"+tf] = +b.dataset.cz;
+      try { localStorage.setItem(CH_KEY, JSON.stringify(t)); } catch(e){}
+      if (opt.redraw) opt.redraw(); else if (dlg && dlg.open) render(); });
     wrap.querySelectorAll("[data-ct]").forEach(b=>b.onclick=()=>{ const t = chOpts(); t[b.dataset.ct] = !t[b.dataset.ct];
       try { localStorage.setItem(CH_KEY, JSON.stringify(t)); } catch(e){}
       if (opt.redraw) opt.redraw(); else if (dlg && dlg.open) render(); });
   }, 0);
   return opt.bare ? html : `<div>${html}</div>`;
 }
+const LONG = {}, LONGV = {};
+function loadLong(sym){ const k = shard(sym);
+  if (!LONG[k]) LONG[k] = fetch(`px/${k}.json`).then(r=>r.ok?r.json():{dates:{},s:{}}).catch(()=>({dates:{},s:{}})).then(j=>{ LONGV[k]=j; return j; });
+  return LONG[k]; }
+function longData(sym, tf){ const k = shard(sym), j = LONGV[k]; if (!j) return undefined;
+  const r = (j.s||{})[sym], d = (j.dates||{})[tf]; if (!r || !r[tf] || !d) return null;
+  const [o,h,l,c] = r[tf]; return {o, h, l, c, dates: d}; }
 window.AZH_CHART = (z, lv, dates, tf, fb, opt) => chart(z, lv, dates, tf, fb, opt);
 window.AZH_STOCK = sym => loadStock(sym);
 window.AZH_INDEX = () => loadIndex();
