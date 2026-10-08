@@ -126,7 +126,8 @@ def main():
     if a.demo:   # a few fake dates so the warning can be seen
         earn = {s["sym"]: (datetime.now() + timedelta(days=5 + i)).strftime("%Y-%m-%d") for i, s in enumerate(stocks[:40:3])}
     print(f"  market regime: {reg['state']} (score {reg['score']})")
-    if a.intraday and asof == today:          # market day: show the refresh time
+    _ist = datetime.now(timezone(timedelta(hours=5, minutes=30)))
+    if a.intraday and asof == today and (9, 15) <= (_ist.hour, _ist.minute) <= (15, 45):   # market open: show the refresh time
         reg["live"] = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%I:%M %p IST").lstrip("0")
     (DOCS / "regime.json").write_text(json.dumps(clean(reg)), encoding="utf-8")
     volx = {s["sym"]: s.get("vol_x") for s in stocks}
@@ -201,6 +202,11 @@ def main():
                              "res_end": "2026-06-30"} for s_ in stocks}
     elif a.intraday:
         nse_f = fundm.load_nse()
+        if not nse_f:                      # first run ever: start the results cache with the most traded stocks
+            try:
+                nse_f = fundm.refresh_nse([s_["sym"] for s_ in stocks if s_["liquid"]], budget=150)
+            except Exception as e:
+                print(f"  ! NSE results skipped: {str(e)[:100]}")
     else:
         today_ = datetime.now().strftime("%Y-%m-%d")
         just = [k for k, d in (earn or {}).items() if d and d <= today_ and d >= (datetime.now() - timedelta(days=4)).strftime("%Y-%m-%d")]
@@ -240,6 +246,10 @@ def main():
                    clean({"d": ld, "w": lw}), fmap, {"d": dates_d, "w": dates_w}, gen,
                    {"partial": partial, "asof": asof}, clean(su), clean(mon),
                    extra={"rs": rs, "earn": earn, "fib": clean(fibs), "sg": sg, "ser": clean(ser), "geo": clean(geo), "ew": clean(ewg), "nw": nws, "fu": clean(fu), "al": own_al})
+    try:
+        profiles.write_long(px, tick, {"d": dates_d, "w": dates_w})
+    except Exception as e:
+        print(f"  ! long chart history skipped: {str(e)[:100]}")
     zones_page.render(clean({"stocks": zrows,
                              "tf": {"d": {"dates": dates_d, "lb_start": lb_d},
                                     "w": {"dates": dates_w, "lb_start": lb_w,
