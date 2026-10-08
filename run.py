@@ -36,6 +36,7 @@ def main():
     ap.add_argument("--no-news", action="store_true")
     ap.add_argument("--demo", action="store_true", help="synthetic data, no internet needed")
     ap.add_argument("--backtest", action="store_true", help="rerun the weekly zone backtest (slow, weekly)")
+    ap.add_argument("--intraday", action="store_true", help="market-hours refresh: today's prices only, cached history")
     a = ap.parse_args()
     t0 = time.time()
 
@@ -50,12 +51,15 @@ def main():
         print(f"  {len(universe)} stocks, {universe['sector'].nunique()} sectors")
 
         print("2/5 prices")
-        px = prices.fetch_prices(universe["ticker"].tolist(), BENCHMARK)
+        if a.intraday:
+            px = prices.fetch_intraday(universe["ticker"].tolist(), BENCHMARK)
+        else:
+            px = prices.fetch_prices(universe["ticker"].tolist(), BENCHMARK)
         close, volume = px["Close"], px["Volume"]
         if BENCHMARK not in close.columns:
             sys.exit("Benchmark prices missing; Yahoo may be down. Try again later.")
 
-        if a.fundamentals:
+        if a.fundamentals and not a.intraday:
             print("3/5 fundamentals")
             # liquid names first, so the useful ones are done if we hit limits
             tv = (close * volume).rolling(20).mean().iloc[-1].sort_values(ascending=False)
@@ -122,6 +126,8 @@ def main():
     if a.demo:   # a few fake dates so the warning can be seen
         earn = {s["sym"]: (datetime.now() + timedelta(days=5 + i)).strftime("%Y-%m-%d") for i, s in enumerate(stocks[:40:3])}
     print(f"  market regime: {reg['state']} (score {reg['score']})")
+    if a.intraday and asof == today:          # market day: show the refresh time
+        reg["live"] = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%I:%M %p IST").lstrip("0")
     (DOCS / "regime.json").write_text(json.dumps(clean(reg)), encoding="utf-8")
     volx = {s["sym"]: s.get("vol_x") for s in stocks}
     lrows = []
@@ -158,7 +164,60 @@ def main():
             print(f"  ! circuit bands not loaded: {str(e)[:80]}")
     sg = signals.build(px, tick, ld, lw, fibs, circuit)
     geo = {tf: {t: r.pop("_g") for t, r in sg[tf].items() if "_g" in r} for tf in ("d", "w")}
+    ewg = {tf: {t: r.pop("_e") for t, r in sg[tf].items() if "_e" in r} for tf in ("d", "w")}
+    from src import news as newsmod2
+    pairs = [(s_["sym"], s_["name"]) for s_ in stocks]
+    if a.demo:
+        nws = newsmod2.stock_triggers(pairs, demo=True)
+    elif a.no_news:
+        nws = newsmod2._load()
+    else:
+        try:
+            nws = newsmod2.stock_triggers(pairs, mover_news)
+        except Exception as e:
+            print(f"  ! news triggers skipped: {str(e)[:100]}")
+            nws = newsmod2._load()
+    for tf, rows_ in newsmod2.events(nws, tick, dates_d, dates_w).items():
+        for t, r in rows_.items():
+            sg[tf].setdefault(t, {}).update(r)
+    # ownership alerts (NSE insider trades, pledges, bulk/block deals, surveillance, delivery)
+    from src import ownership, fundamentals as fundm
+    last_px = {s_["sym"]: s_.get("price") for s_ in stocks}
+    try:
+        own_al, own_ev, own_facts = ownership.build(pairs, dates_d, dates_w, last_px,
+                                                    fetch=not a.demo and not a.intraday, demo=a.demo)
+    except Exception as e:
+        print(f"  ! ownership alerts skipped: {str(e)[:100]}")
+        own_al, own_ev, own_facts = {}, {"d": {}, "w": {}}, {}
+    for tf, rows_ in own_ev.items():
+        for t, r in rows_.items():
+            sg[tf].setdefault(t, {}).update(r)
+    # fundamentals: NSE quarterly results (a few hundred stocks per evening run) + Yahoo when available
+    if a.demo:
+        import random
+        rnd = random.Random(5)
+        nse_f = {s_["sym"]: {"sg": round(rnd.uniform(-20, 40), 1), "pg": round(rnd.uniform(-50, 80), 1),
+                             "eps_ttm": round(rnd.uniform(-5, 80), 2), "npm_q": round(rnd.uniform(-5, 25), 1),
+                             "res_end": "2026-06-30"} for s_ in stocks}
+    elif a.intraday:
+        nse_f = fundm.load_nse()
+    else:
+        today_ = datetime.now().strftime("%Y-%m-%d")
+        just = [k for k, d in (earn or {}).items() if d and d <= today_ and d >= (datetime.now() - timedelta(days=4)).strftime("%Y-%m-%d")]
+        order = [s_["sym"] for s_ in stocks if s_["liquid"]] + [s_["sym"] for s_ in stocks if not s_["liquid"]]
+        try:
+            nse_f = fundm.refresh_nse(order, priority=just)
+        except Exception as e:
+            print(f"  ! NSE results skipped: {str(e)[:100]}")
+            nse_f = fundm.load_nse()
+    fu = fundm.combine(stocks, fund, nse_f, own_facts)
+    for tf in ("d", "w"):
+        sg[tf] = {t: r for t, r in sg[tf].items() if r}
     ser = series.build(px, tick)
+    for tf in ("d", "w"):
+        for t, r in ser[tf].items():
+            if fu.get(t[:-3]):
+                r["fu"] = fu[t[:-3]]
     secq = {x["sector"]: x.get("q_w") for x in sectors}
     scr_rows = []
     for s_ in stocks:
@@ -180,7 +239,7 @@ def main():
     profiles.write(clean(stocks), clean(sectors), clean({"d": zd, "w": zw}), clean({"d": hd, "w": hw}),
                    clean({"d": ld, "w": lw}), fmap, {"d": dates_d, "w": dates_w}, gen,
                    {"partial": partial, "asof": asof}, clean(su), clean(mon),
-                   extra={"rs": rs, "earn": earn, "fib": clean(fibs), "sg": sg, "ser": clean(ser), "geo": clean(geo)})
+                   extra={"rs": rs, "earn": earn, "fib": clean(fibs), "sg": sg, "ser": clean(ser), "geo": clean(geo), "ew": clean(ewg), "nw": nws, "fu": clean(fu), "al": own_al})
     zones_page.render(clean({"stocks": zrows,
                              "tf": {"d": {"dates": dates_d, "lb_start": lb_d},
                                     "w": {"dates": dates_w, "lb_start": lb_w,
