@@ -2,10 +2,15 @@ name: Update dashboard
 
 on:
   schedule:
-    - cron: "45 11 * * 1-5"   # 5:15 PM IST, Mon-Fri, after market close
+    - cron: "45 11 * * 1-5"   # 5:15 PM IST, Mon-Fri, after market close (full refresh)
+    - cron: "15,45 4-9 * * 1-5"   # every 30 min, 9:45 AM - 3:15 PM IST: quick intraday refresh
     - cron: "30 3 * * 6"      # 9:00 AM IST Saturday: weekly fundamentals refresh
   workflow_dispatch:
     inputs:
+      intraday:
+        description: "Quick intraday refresh (today's prices only)"
+        type: boolean
+        default: false
       fundamentals:
         description: "Refresh fundamentals too (slow, ~1 hour first time)"
         type: boolean
@@ -25,7 +30,7 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: ${{ github.event.schedule == '15,45 4-9 * * 1-5' && 25 || 300 }}
     steps:
       - uses: actions/checkout@v4
 
@@ -49,7 +54,8 @@ jobs:
           if [ "${{ github.event.schedule }}" = "30 3 * * 6" ]; then ARGS="--fundamentals --backtest"; fi
           if [ "${{ inputs.fundamentals }}" = "true" ]; then ARGS="$ARGS --fundamentals"; fi
           if [ "${{ inputs.backtest }}" = "true" ]; then ARGS="$ARGS --backtest"; fi
-          python run.py $ARGS
+          if [ "${{ github.event.schedule }}" = "15,45 4-9 * * 1-5" ] || [ "${{ inputs.intraday }}" = "true" ]; then ARGS="--intraday"; fi
+          python -u run.py $ARGS
 
       # Publish to a separate "gh-pages" branch as one fresh commit each time,
       # so the repository doesn't grow by megabytes every day and your own
