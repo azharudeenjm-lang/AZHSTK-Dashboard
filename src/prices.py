@@ -103,3 +103,58 @@ def fetch_prices(tickers, benchmark):
         except Exception:
             pass
     return out
+
+
+def fetch_intraday(tickers, benchmark):
+    """Market-hours refresh: yesterday's full history from the cache plus the
+    last 5 days (including today's bar so far) from Yahoo. Takes 1-3 minutes
+    instead of downloading 5 years again. Falls back to a full download if
+    there is no cache yet."""
+    try:
+        old = {f: pd.read_parquet(CACHE / f"{f.lower()}.parquet") for f in FIELDS}
+    except Exception:
+        print("  no cached history yet: doing a full download")
+        return fetch_prices(tickers, benchmark)
+    import yfinance as yf
+    allt = list(dict.fromkeys([benchmark] + list(tickers)))
+    new = {f: [] for f in FIELDS}
+    got = 0
+    for i in range(0, len(allt), 100):
+        batch = allt[i:i + 100]
+        try:
+            df = yf.download(batch, period="5d", interval="1d", auto_adjust=True, group_by="column",
+                             threads=THREADS, timeout=TIMEOUT, progress=False)
+        except Exception as e:
+            print(f"  ! intraday batch {i}: {str(e)[:80]}")
+            df = None
+        if df is not None and not df.empty:
+            if not isinstance(df.columns, pd.MultiIndex):
+                df.columns = pd.MultiIndex.from_product([df.columns, batch])
+            ok = df["Close"].columns[df["Close"].notna().any()]
+            got += len(ok)
+            for f in FIELDS:
+                if f in df.columns.get_level_values(0):
+                    new[f].append(df[f][ok])
+        time.sleep(1)
+    print(f"  intraday prices: {got} of {len(allt)} tickers")
+    if got < 0.3 * len(allt):
+        print("  Yahoo returned too little; keeping the last saved prices")
+        return {f: old[f] for f in FIELDS}
+    out = {}
+    for f in FIELDS:
+        n = pd.concat(new[f], axis=1) if new[f] else pd.DataFrame()
+        n = n.loc[:, ~n.columns.duplicated()]
+        n.index = pd.to_datetime(n.index).tz_localize(None).normalize()
+        o = old[f]
+        out[f] = n.combine_first(o).sort_index()        # fresh values win where both exist
+    cnt = out["Close"].notna().sum(axis=1)
+    real = cnt >= 0.5 * cnt.max()
+    if (~real).any():
+        for f in FIELDS:
+            out[f] = out[f][real]
+    cols = out["Close"].columns
+    for f in FIELDS:
+        out[f] = out[f].reindex(index=out["Close"].index, columns=cols).astype(float)
+    last = out["Close"].index[-1]
+    print(f"  latest bar: {last:%a %d %b %Y} ({int(out['Close'].loc[last].notna().sum())} stocks)")
+    return out

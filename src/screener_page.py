@@ -221,7 +221,7 @@ function paramControls(c){
 }
 function condRow(c, i){
   const groups = [...new Set(META.conds.map(x=>x.g))];
-  const pg = (META.pconds||[]).length ? `<optgroup label="${esc(META.pconds[0].g)}">${META.pconds.map(x=>`<option value="${x.id}" ${x.id===c.id?"selected":""}>${esc(x.l)}</option>`).join("")}</optgroup>` : "";
+  const pg = [...new Set((META.pconds||[]).map(x=>x.g))].map(g=>`<optgroup label="${esc(g)}">${META.pconds.filter(x=>x.g===g).map(x=>`<option value="${x.id}" ${x.id===c.id?"selected":""}>${esc(x.l)}</option>`).join("")}</optgroup>`).join("");
   const opts = pg + groups.map(g=>`<optgroup label="${esc(g)}">${META.conds.filter(x=>x.g===g).map(x=>`<option value="${x.id}" ${x.id===c.id?"selected":""}>${esc(x.l)}</option>`).join("")}</optgroup>`).join("");
   const isP = SCR.isP(c);
   const kind = isP ? (SCR.pEvent(META, c) ? "e" : "s") : (META.conds.find(x=>x.id===c.id)||{}).k;

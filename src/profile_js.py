@@ -109,6 +109,10 @@ const WL = {
 window.AZH_WL = WL;
 
 /* ---------- screener: shared evaluator (Screener tab + pop-up) ---------- */
+const FUNDK = {"P/E":"pe","P/B":"pb","ROE %":"roe","Debt to equity":"de","Market cap (₹ cr)":"mc","Net margin %":"npm",
+  "Sales growth % (vs same quarter last year)":"sg","Profit growth % (vs same quarter last year)":"pg","Dividend yield %":"dy",
+  "Promoter holding %":"prom","Promoter holding change (points, last quarter)":"pchg","Pledged % of promoter shares":"plg",
+  "Institutional holding %":"inst","Delivery % (latest day)":"dlv","Delivery vs its 20-day average (x)":"dlvx","Quality score (0-5)":"qs"};
 let SMETA = null;
 const SCR = {
   meta(){
@@ -144,6 +148,8 @@ const SCR = {
       case "p_st": t = `SuperTrend(${o.set}) ${opl(o.op)}`; break;
       case "p_pch": t = `Price within ±${o.x}% channel during last ${o.per}`; break;
       case "p_env": t = `${o.type} ${o.per} ±${o.x}% envelope: ${opl(o.op)}`; break;
+      case "p_fund": return `${o.m} ${o.op==="gt"?"above":"below"} ${o.x}`;
+      case "p_grade": return `Quality grade ${o.g}`;
       default: t = d.l;
     }
     return `${c.tf==="w"?"W":"D"}: ${t}${SCR.pEvent(m,c) && v>0 ? ` (${v} ${c.tf==="w"?"wk":(v===1?"bar":"bars")} ago)` : ""}`; },
@@ -194,6 +200,9 @@ const SCR = {
           if (o.op==="xa" && cl[i]!=null && cl[i-1]!=null && cl[i] > U && cl[i-1] <= U) return b;
           if (o.op==="xb" && cl[i]!=null && cl[i-1]!=null && cl[i] < Lw && cl[i-1] >= Lw) return b; }
         return null; }
+      case "p_fund": { const f = ser.fu || {}, k = FUNDK[o.m]; const v = k ? f[k] : null; if (v==null) return null;
+        return (o.op==="gt" ? v > X : v < X) ? 0 : null; }
+      case "p_grade": { const g = (ser.fu||{}).qg; if (!g) return null; return ({"A":"A","A or B":"AB","A, B or C":"ABC"})[o.g].includes(g) ? 0 : null; }
       case "p_st": { const st = (ser.st||{})[o.set]; if (!st) return null; const L = st.length - 1;
         if (o.op==="bull") return st[L]==="1" ? 0 : null; if (o.op==="bear") return st[L]==="0" ? 0 : null;
         for (let b=0; b<n && L-b>=1; b++){ const a1 = st[L-b], a0 = st[L-b-1];
@@ -201,7 +210,7 @@ const SCR = {
         return null; }
     }
     return null; },
-  lvl(r, c){ const v = (((r.sig||{})[c.tf]||{})._v||{})[c.id]; return v ? ` · ${String(c.id).startsWith("tl_")?"line":"level"} ₹${Number(v).toLocaleString("en-IN",{maximumFractionDigits:2})}` : ""; },
+  lvl(r, c){ const v = (((r.sig||{})[c.tf]||{})._v||{})[c.id]; return v ? ` · ${String(c.id).startsWith("tl_")?"line":({ew_w2:"wave 1 high",ew_w3x:"wave 1 high",ew_w4:"wave 4 zone"})[c.id]||(String(c.id).startsWith("ew_")?"wave target":"level")} ₹${Number(v).toLocaleString("en-IN",{maximumFractionDigits:2})}` : ""; },
   label(m, c, v){ if (SCR.isP(c)) return SCR.pLabel(m, c, v); const x = m._by[c.id]; if (!x) return c.id;
     return `${c.tf==="w"?"W":"D"}: ${x.l}${x.k==="e" && v>0 ? ` (${v} ${c.tf==="w"?"wk":(v===1?"bar":"bars")} ago)` : ""}`; },
   hits(screen, r, m){
@@ -238,7 +247,7 @@ function mountRegime(){
     const msg = {"Risk-on":"breakouts tend to follow through","Neutral":"be selective, favour leading sectors","Risk-off":"most breakouts fail; Setups are stricter"}[g.state] || "";
     const el = document.createElement("div"); el.className = "regime"; el.style.setProperty("--c", `var(${col})`);
     const pd_ = g.asof ? new Date(g.asof+"T00:00:00").toLocaleDateString("en-IN",{weekday:"short",day:"2-digit",month:"short"}) : "";
-    el.innerHTML = `<b>Market: ${esc(g.state)}</b><span class="pf-mut">${esc(msg)}</span>${pd_?`<span style="margin-left:auto;font-size:.82rem">Prices: close of <b>${esc(pd_)}</b></span>`:""}
+    el.innerHTML = `<b>Market: ${esc(g.state)}</b><span class="pf-mut">${esc(msg)}</span>${g.live ? `<span style="margin-left:auto;font-size:.82rem">Prices: <b>live, ${esc(pd_)} ${esc(g.live)}</b> <span class="pf-mut">(market open; can lag up to 15 min)</span></span>` : pd_?`<span style="margin-left:auto;font-size:.82rem">Prices: close of <b>${esc(pd_)}</b></span>`:""}
       <details><summary>Why</summary><ul>${g.items.map(i=>`<li>${i.ok?"✓":i.bad?"✗":"~"} ${esc(i.t)}</li>`).join("")}</ul></details>`;
     head.insertAdjacentElement("afterend", el); }).catch(()=>{});
 }
@@ -388,6 +397,49 @@ function screenerBlock(p, tf){
     <p style="font-size:.85rem;margin:10px 0 0"><span class="pf-mut">Your saved screens:</span> ${saved.length ? saved.map(s=>`<a href="screener.html#screen=${encodeURIComponent(s.name)}" style="color:var(--p-link)">${esc(s.name)}</a>`).join(", ") : '<span class="pf-mut">none matched</span>'}</p>
     <p style="font-size:.85rem;margin:4px 0 0"><span class="pf-mut">Ready-made screens:</span> ${presets.length ? presets.map(s=>esc(s.name)).join(", ") : '<span class="pf-mut">none matched</span>'}</p></div>`;
 }
+const NWK = {res:["Results","#2F62C8"], ord:["Order win","#1E8F5A"], deal:["Deal","#7A3FC8"], corp:["Corporate action","#13857A"],
+             rat:["Broker view","#C9780F"], reg:["Regulatory","#C2453B"], mgmt:["Management","#5B6472"], oth:["News","#5B6472"]};
+function newsAgo(iso){ const d = Math.round((new Date(new Date().toISOString().slice(0,10)) - new Date(iso)) / 864e5);
+  return d<=0 ? "today" : d===1 ? "yesterday" : `${d} days ago`; }
+const QGC = {A:"#1E8F5A", B:"#2F62C8", C:"#C9780F", D:"#C2453B"};
+function fundBlock(p){
+  const f = p.fu || {}, al = p.al || [];
+  const v = (x, d=1, suf="") => x==null ? "–" : fmt(x, d) + suf;
+  const sgn = (x, d=1, suf="%") => x==null ? "–" : `<span style="color:${x>=0?"var(--up,#1E8F5A)":"var(--down,#C2453B)"}">${x>0?"+":""}${fmt(x,d)}${suf}</span>`;
+  const qd = f.qe ? new Date(f.qe+"T00:00:00").toLocaleDateString("en-IN",{month:"short",year:"numeric"}) : null;
+  const cells = [
+    ["P/E", v(f.pe)], ["P/B", v(f.pb)], ["ROE", v(f.roe,1,"%")], ["Debt / equity", v(f.de,2)],
+    ["Market cap", f.mc!=null ? "₹"+fmt(f.mc,0)+" cr" : "–"], ["Net margin", v(f.npm,1,"%")],
+    [`Sales growth${qd?` (${qd} qtr, YoY)`:" (YoY)"}`, sgn(f.sg)], [`Profit growth${qd?` (${qd} qtr, YoY)`:" (YoY)"}`, sgn(f.pg)],
+    ["Dividend yield", v(f.dy,2,"%")], ["Institutions hold", v(f.inst,1,"%")],
+    ["Promoters hold", v(f.prom,2,"%") + (f.pchg!=null ? ` <small>(${f.pchg>0?"+":""}${fmt(f.pchg,2)} last qtr)</small>` : "")],
+    ["Pledged (of promoter shares)", f.plg!=null ? `<span style="color:${f.plg>25?"var(--down,#C2453B)":"inherit"}">${fmt(f.plg,1)}%</span>` : "–"],
+    ["Delivery % (latest day)", f.dlv!=null ? `${fmt(f.dlv,0)}%${f.dlvx!=null?` <small>(${fmt(f.dlvx,1)}× its 20-day avg)</small>`:""}` : "–"],
+    ["Surveillance", f.asm ? `<span style="color:var(--down,#C2453B)">${esc(f.asm)}</span>` : "none"]];
+  const tone = m => m>0 ? ["▲","var(--up,#1E8F5A)"] : m<0 ? ["▼","var(--down,#C2453B)"] : ["•","var(--muted)"];
+  const alerts = al.slice(0, 8).map(x=>{ const t = tone(x.m); return `<li style="display:flex;gap:8px;padding:5px 0;border-top:1px solid var(--line);font-size:.85rem"><b style="color:${t[1]}">${t[0]}</b><span style="flex:1">${esc(x.t)}<br><small class="pf-mut">${newsAgo(x.d)}</small></span></li>`; }).join("");
+  const grade = f.qg ? `<span class="pchip" style="--c:${QGC[f.qg]};margin-left:6px" title="Quality score ${fmt(f.qs,1)} of 5">Quality ${f.qg}</span>` : "";
+  return `<div class="pf-sec"><h3>Fundamentals and alerts ${grade}</h3>
+    ${alerts ? `<ul style="list-style:none;margin:0 0 10px;padding:0">${alerts}</ul>` : `<p class="pf-mut" style="font-size:.85rem;margin:0 0 8px">No promoter, insider, pledge, bulk-deal or surveillance alerts.</p>`}
+    <div class="pf-kv">${cells.map(([k,x])=>`<div><span>${k}</span><b>${x}</b></div>`).join("")}</div>
+    <p class="pf-mut" style="font-size:.75rem;margin:6px 0 0">Quality grade: ROE 15%+, sales and profit growth 10%+, net margin 8%+, debt/equity 1 or less (not used for banks and finance companies), one grade lower if over 25% of promoter shares are pledged or the stock is under surveillance. Sources: NSE results, insider and pledge filings, bulk/block deals and delivery data; Yahoo for ROE, P/B and debt when available. "–" means not available yet.</p></div>`;
+}
+function newsBlock(p){
+  const items = p.nw || [];
+  if (!items.length) return `<div class="pf-sec"><h3>News and triggers</h3><p class="pf-mut" style="font-size:.85rem">No company filings or headlines matched this stock in the last 30 days.</p></div>`;
+  const row = x => { const k = NWK[x.k] || NWK.oth, tone = x.m>0 ? ["▲","var(--up,#1E8F5A)","positive"] : x.m<0 ? ["▼","var(--down,#C2453B)","negative"] : ["•","var(--muted)","neutral"];
+    const t = x.u && /^https?:\/\//i.test(x.u) ? `<a href="${esc(x.u)}" target="_blank" rel="noopener" style="color:inherit">${esc(x.t)}</a>` : esc(x.t);
+    return `<li style="display:flex;gap:8px;align-items:baseline;padding:6px 0;border-top:1px solid var(--line);font-size:.86rem">
+      <b style="color:${tone[1]}" title="${tone[2]} tone" aria-label="${tone[2]} tone">${tone[0]}</b>
+      <span style="flex:1">${t}<br><small class="pf-mut">${newsAgo(x.d)} · ${esc(x.s||"")}</small></span>
+      <span class="pchip" style="--c:${k[1]};white-space:nowrap">${x.f?"Filing · ":""}${k[0]}</span></li>`; };
+  const recent = items.filter(x => (new Date() - new Date(x.d)) / 864e5 <= 3);
+  const top = items.slice(0, 5), rest = items.slice(5);
+  return `<div class="pf-sec"><h3>News and triggers ${recent.length ? `<span class="pchip" style="--c:#C9780F;margin-left:6px">${recent.length} in the last 3 days</span>` : ""}</h3>
+    <ul style="list-style:none;margin:0;padding:0">${top.map(row).join("")}</ul>
+    ${rest.length ? `<details style="margin-top:4px"><summary class="pf-mut" style="cursor:pointer;font-size:.82rem">${rest.length} older item${rest.length>1?"s":""}</summary><ul style="list-style:none;margin:0;padding:0">${rest.map(row).join("")}</ul></details>` : ""}
+    <p class="pf-mut" style="font-size:.75rem;margin:6px 0 0">From NSE company filings and market news feeds, matched by company name. Tone (▲ ▼) is a keyword guess. Read the item before acting.</p></div>`;
+}
 function renderMonthly(p, s){
   const m = p.m;
   const body = !m || !m.c || m.c.length < 2 ? '<p class="pf-mut">Not enough monthly history.</p>' : (()=>{
@@ -428,6 +480,8 @@ function render(){
 
   ${earnWarn(p)}${tradeBox(s, p)}
   ${setupStrip(p.su)}
+  ${fundBlock(p)}
+  ${newsBlock(p)}
   ${tf==="m" ? renderMonthly(p, s) : `  ${tf==="w" && IDX && IDX.partial ? `<p class="pf-mut" style="font-size:.8rem;margin:0 0 10px">This week is still forming (prices up to ${dl(IDX.asof)}), so the weekly zone can change until Friday's close.</p>` : ""}
   <div class="pf-cards">
     <div class="pf-card"><h3>Technical zone</h3><div>${zchip(z.zone)}</div><small>${sinceTxt}</small>${z.prev?`<small>came from ${esc(z.prev)}</small>`:""}${z.div?`<small style="color:var(--pz-div)">${esc(z.div.kind)} divergence: high ₹${fmt(z.div.p1,2)} (${dl(z.div.d1)}, RSI ${fmt(z.div.r1,0)}) → higher high ₹${fmt(z.div.p2,2)} (${dl(z.div.d2)}, RSI ${fmt(z.div.r2,0)})</small>`:""}</div>
@@ -437,7 +491,7 @@ function render(){
       <small>support ${lv.sup?`₹${fmt(lv.sup.p,2)} (−${fmt(lv.sup.d)}%)`:"–"}</small><small>resistance ${lv.res?`₹${fmt(lv.res.p,2)} (+${fmt(lv.res.d)}%)`:"–"}</small></div>
   </div>
 
-  <div class="pf-sec"><h3>Price chart (${tf==="w"?"weekly":"daily"} candles)</h3>${chart(z, lv, dates, tf, (p.fib||{})[tf], {pat: (p.pat||{})[tf]})}
+  <div class="pf-sec"><h3>Price chart (${tf==="w"?"weekly":"daily"} candles)</h3>${chart(z, lv, dates, tf, (p.fib||{})[tf], {pat: (p.pat||{})[tf], ew: (p.ew||{})[tf]})}
     <div class="pf-key">${["Bullish","Strong momentum","Extended","Divergence zone","Bearish","Oversold","Accumulation","Neutral"].map(k=>`<span><i style="--c:var(${ZC[k]})"></i>${k}</span>`).join("")}</div></div>
 
   ${fibBlock((p.fib||{})[tf], tf, p.px)}
@@ -466,8 +520,6 @@ function render(){
     <div><span>vs 50-DMA</span><b>${pct(p.vs50)}</b></div><div><span>From 52w high</span><b>${pct(p.hi)}</b></div>
     <div><span>1M</span><b>${pct(p.r1m)}</b></div><div><span>1Y</span><b>${pct(p.r1y)}</b></div>
     <div><span>RS rank</span><b>${p.rs??"–"}</b></div><div><span>Next results</span><b>${p.earn?dl(p.earn):"–"}</b></div>
-    <div><span>P/E</span><b>${fmt(p.f.pe)}</b></div><div><span>ROE</span><b>${p.f.roe!=null?fmt(p.f.roe)+"%":"–"}</b></div>
-    <div><span>Debt/Equity</span><b>${fmt(p.f.de,2)}</b></div><div><span>Mcap</span><b>${p.f.mcap_cr!=null?"₹"+fmt(p.f.mcap_cr,0)+" cr":"–"}</b></div>
   </div></div>`}
   </div>`;
   if (keepTop) dlg.querySelector(".pf").scrollTop = keepTop;
@@ -478,7 +530,7 @@ function render(){
 
 /* ---------- candlestick chart with line studies ---------- */
 const CH_KEY = "azh:chart";
-const chOpts = () => { try { return {zones:true, sr:true, tl:true, fib:true, ma:false, pat:true, ...JSON.parse(localStorage.getItem(CH_KEY)||"{}")}; } catch(e){ return {zones:true,sr:true,tl:true,fib:true,ma:false,pat:true}; } };
+const chOpts = () => { try { return {zones:true, sr:true, tl:true, fib:true, ma:false, pat:true, ew:true, ...JSON.parse(localStorage.getItem(CH_KEY)||"{}")}; } catch(e){ return {zones:true,sr:true,tl:true,fib:true,ma:false,pat:true,ew:true}; } };
 function chart(z, lv, dates, tf, fb, opt){
   opt = opt || {};
   const host = opt.width || ((dlg && dlg.open && dlg.clientWidth) || 900);
@@ -539,6 +591,19 @@ function chart(z, lv, dates, tf, fb, opt){
     const a = pg.lines[0], ia = Math.max(0, (n-1)-a[0]);
     g += `<text x="${X(ia)+2}" y="${P.t+12+pi*13}" font-size="11" font-weight="700" fill="${col}">${esc(pg.name)}</text>`;
   });
+  // Elliott wave count (automatic): labelled swing points, target and invalidation levels
+  const ew = opt.ew;
+  if (T.ew && ew && ew.pts){ const col = ew.d==="up" ? "#1F6FB2" : "#B5338A"; let d="";
+    const vis = ew.pts.map(([a,v,lab])=>[(n-1)-a, v, lab]).filter(([i])=>i>=0);
+    vis.forEach(([i,v],k)=>{ d += `${k?"L":"M"}${X(i).toFixed(1)},${Y(v).toFixed(1)}`; });
+    g += `<path d="${d}" fill="none" stroke="${col}" stroke-width="1.6" opacity=".85"/>`;
+    vis.forEach(([i,v,lab], k)=>{ const all = ew.pts.length, j = all - vis.length + k;
+      const isHigh = (j%2===1) === (ew.d==="up");
+      const y = Y(v) + (isHigh ? -9 : 17);
+      g += `<circle cx="${X(i).toFixed(1)}" cy="${(y-4).toFixed(1)}" r="7.5" fill="var(--card,#fff)" stroke="${col}" stroke-width="1.2"/><text x="${X(i).toFixed(1)}" y="${y.toFixed(1)}" font-size="10" font-weight="700" text-anchor="middle" fill="${col}">${lab==="0"?"·":lab}</text>`; });
+    if (inR(ew.tg)) g += `<line x1="${P.l}" x2="${W-P.r}" y1="${Y(ew.tg)}" y2="${Y(ew.tg)}" stroke="${col}" stroke-width="1" stroke-dasharray="10 4"/><text x="${W-P.r+4}" y="${Y(ew.tg)+4}" font-size="10" font-weight="600" fill="${col}">EW ${fmt(ew.tg, ew.tg<100?2:0)}</text>`;
+    if (inR(ew.iv)) g += `<line x1="${P.l}" x2="${W-P.r}" y1="${Y(ew.iv)}" y2="${Y(ew.iv)}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="1 3"/><text x="${(P.l + (W-P.r-P.l)*0.4).toFixed(0)}" y="${Y(ew.iv)+12}" font-size="10" fill="var(--muted)">EW count wrong ${ew.d==="up"?"below":"above"} ${fmt(ew.iv, ew.iv<100?2:0)}</text>`;
+  }
   // fibonacci
   if (T.fib && fb){ ["38.2","50","61.8"].forEach(k=>{ const v = fb.lv[k]; if (inR(v))
       g += `<line x1="${P.l}" x2="${W-P.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="#C9780F" stroke-width="1" stroke-dasharray="2 3"/><text x="${P.l+4}" y="${Y(v)-3}" font-size="10" fill="#C9780F">Fib ${k}%</text>`; });
@@ -549,7 +614,8 @@ function chart(z, lv, dates, tf, fb, opt){
   if (dates.length){ [0, Math.floor((n-1)/2), n-1].forEach((i,k)=>{ g += `<text x="${X(i)}" y="${H-7}" font-size="11" fill="var(--muted)" text-anchor="${["start","middle","end"][k]}">${dl(dates[i])}</text>`; }); }
   g += `<line class="cx" x1="0" x2="0" y1="${P.t}" y2="${H-P.b}" stroke="var(--muted)" stroke-dasharray="3 3" visibility="hidden"/>`;
   const btn = (k, label) => `<button type="button" class="pf-btn ${T[k]?'on':''}" data-ct="${k}" aria-pressed="${!!T[k]}" style="padding:3px 9px;font-size:.76rem">${label}</button>`;
-  const html = `<div class="pf-act" style="margin:0 0 6px">${btn("zones","Zones")}${btn("sr","Support / resistance")}${btn("tl","Trendlines")}${btn("fib","Fibonacci")}${btn("pat","Pattern")}${btn("ma","MA 20 / 50")}</div>
+  const html = `<div class="pf-act" style="margin:0 0 6px">${btn("zones","Zones")}${btn("sr","Support / resistance")}${btn("tl","Trendlines")}${btn("fib","Fibonacci")}${btn("pat","Pattern")}${btn("ew","Elliott")}${btn("ma","MA 20 / 50")}</div>
+    ${T.ew && ew && ew.s ? `<div style="font-size:.8rem;margin:0 0 4px"><b style="color:${ew.d==="up"?"#1F6FB2":"#B5338A"}">Elliott (auto count):</b> ${esc(ew.s)}${ew.tg?` · target ₹${fmt(ew.tg,2)}`:""}${ew.iv?` · count is wrong ${ew.d==="up"?"below":"above"} ₹${fmt(ew.iv,2)}`:""}</div>` : ""}
     <div class="pf-mut" id="${id}-r" style="font-size:.78rem;min-height:1.2em">${cut ? `Latest ${n} bars. ` : ""}Tap or hover a candle for its prices.</div>
     <svg id="${id}" class="pf-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Candlestick chart with support, resistance, trendlines and Fibonacci levels" style="touch-action:pan-y">${g}</svg>`;
   setTimeout(()=>{ const svg = document.getElementById(id); if (!svg) return;

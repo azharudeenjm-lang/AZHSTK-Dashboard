@@ -30,6 +30,11 @@ PCH = {"1 week": (5, None), "2 weeks": (10, 2), "1 month": (21, 4), "3 months": 
 K = NB + 1
 
 G = "Indicators (your numbers)"
+FUND_M = ["P/E", "P/B", "ROE %", "Debt to equity", "Market cap (₹ cr)", "Net margin %",
+          "Sales growth % (vs same quarter last year)", "Profit growth % (vs same quarter last year)",
+          "Dividend yield %", "Promoter holding %", "Promoter holding change (points, last quarter)",
+          "Pledged % of promoter shares", "Institutional holding %", "Delivery % (latest day)",
+          "Delivery vs its 20-day average (x)", "Quality score (0-5)"]
 PMETA = [
     {"id": "p_rsi", "g": G, "l": "RSI", "params": [
         {"k": "per", "t": "sel", "o": RSI_P, "d": 14, "lab": "period"},
@@ -87,6 +92,12 @@ PMETA = [
          "labels": {"tu": "touched upper band", "xa": "crossed above upper band", "ab": "closed above upper band",
                     "tl": "touched lower band", "xb": "crossed below lower band", "bl": "closed below lower band",
                     "in": "inside the envelope"}}]},
+    {"id": "p_fund", "g": "Fundamentals (your numbers)", "l": "Fundamental value", "params": [
+        {"k": "m", "t": "sel", "o": FUND_M, "d": "P/E", "lab": ""},
+        {"k": "op", "t": "op", "o": ["lt", "gt"], "d": "lt"},
+        {"k": "x", "t": "num", "d": 30, "lab": "value"}]},
+    {"id": "p_grade", "g": "Fundamentals (your numbers)", "l": "Quality grade", "params": [
+        {"k": "g", "t": "sel", "o": ["A", "A or B", "A, B or C"], "d": "A or B", "lab": "grade"}]},
     {"id": "p_st", "g": G, "l": "SuperTrend", "params": [
         {"k": "set", "t": "sel", "o": [f"{a},{b}" for a, b in ST_P], "d": "10,3", "lab": "(period, multiplier)"},
         {"k": "op", "t": "op", "o": ["bull", "bear", "tb", "tr"], "d": "tb",

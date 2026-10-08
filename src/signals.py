@@ -9,7 +9,9 @@ import numpy as np
 import pandas as pd
 
 from .config import SCREENER_EVENT_BARS as NB, WEEKLY_LIVE
-from . import lines, patterns
+from . import elliott, lines, patterns
+from . import news as _news
+from . import ownership as _own
 
 # id, group, label, kind ("s" state / "e" event)
 META = [
@@ -94,6 +96,9 @@ META += [(i, "Support and resistance", l, k) for i, l, k in lines.SR_META]
 META += [(i, "DeMark TD lines", l, k) for i, l, k in lines.TD_META]
 META += [(i, "Bands and channels", l, k) for i, l, k in patterns.BAND_META]
 META += [(i, "Chart patterns", l, k) for i, l, k in patterns.PAT_META]
+META += [(i, "Elliott waves", l, k) for i, l, k in elliott.META]
+META += [(i, "News triggers", l, k) for i, l, k in _news.META]
+META += [(i, "Ownership and alerts", l, k) for i, l, k in _own.META]
 
 LVMAP = {"Breakout": "lv_brk", "Trendline breakout": "lv_tlb", "Retest": "lv_ret",
          "At trendline support": "lv_tls", "Near support": "lv_sup", "Near resistance": "lv_res",
@@ -329,7 +334,8 @@ def build(px, tickers, ld, lw, fibs, circuit=None):
                 out[t] = row
         extra = lines.build_tf(o, h, l, c, tf)
         prow, pgeo = patterns.build_tf(o, h, l, c, tf, None)
-        for src in (extra, prow):
+        erow, egeo = elliott.build_tf(h, l, c, tf)
+        for src in (extra, prow, erow):
             for t, r in src.items():
                 row = out.setdefault(t, {})
                 v = r.pop("_v", None)
@@ -338,6 +344,8 @@ def build(px, tickers, ld, lw, fibs, circuit=None):
                     row.setdefault("_v", {}).update(v)
         for t, g in pgeo.items():
             out.setdefault(t, {})["_g"] = g
+        for t, g in egeo.items():
+            out.setdefault(t, {})["_e"] = g
         res[tf] = out
         print(f"  screener signals ({tf}): {len(out)} stocks")
     return res

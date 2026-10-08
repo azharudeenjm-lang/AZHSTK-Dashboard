@@ -59,6 +59,16 @@ def write(stocks, sectors, zones, hists, lvls, fund, dates, generated, live=None
         prof["sg"] = {tf: sgx[tf].get(t, {}) for tf in ("d", "w") if tf in sgx}
         gx = extra.get("geo") or {}
         prof["pat"] = {tf: gx[tf][t] for tf in ("d", "w") if tf in gx and t in gx[tf]}
+        ex = extra.get("ew") or {}
+        prof["ew"] = {tf: ex[tf][t] for tf in ("d", "w") if tf in ex and t in ex[tf]}
+        sym_ = t[:-3] if t.endswith(".NS") else t
+        if (extra.get("fu") or {}).get(sym_):
+            prof["fu"] = extra["fu"][sym_]
+        if (extra.get("al") or {}).get(sym_):
+            prof["al"] = [{k: v for k, v in x.items() if k != "e"} for x in extra["al"][sym_]]
+        nw = (extra.get("nw") or {}).get(t[:-3] if t.endswith(".NS") else t)
+        if nw:
+            prof["nw"] = nw[:12]
         sx = extra.get("ser") or {}
         prof["ser"] = {tf: sx[tf].get(t) for tf in ("d", "w") if tf in sx and sx[tf].get(t)}
         if setups and t in setups:
