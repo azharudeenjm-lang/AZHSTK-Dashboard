@@ -19,6 +19,10 @@ on:
         description: "Rerun the weekly zone backtest (adds ~15-25 min)"
         type: boolean
         default: false
+      buy_backtest:
+        description: "Buy criteria backtest from 2020 (adds ~20-30 min)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -54,6 +58,7 @@ jobs:
           if [ "${{ github.event.schedule }}" = "30 3 * * 6" ]; then ARGS="--fundamentals --backtest"; fi
           if [ "${{ inputs.fundamentals }}" = "true" ]; then ARGS="$ARGS --fundamentals"; fi
           if [ "${{ inputs.backtest }}" = "true" ]; then ARGS="$ARGS --backtest"; fi
+          if [ "${{ inputs.buy_backtest }}" = "true" ]; then ARGS="$ARGS --buy-backtest"; fi
           if [ "${{ github.event.schedule }}" = "15,45 4-9 * * 1-5" ] || [ "${{ inputs.intraday }}" = "true" ]; then ARGS="--intraday"; fi
           python -u run.py $ARGS
 
