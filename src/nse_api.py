@@ -13,6 +13,7 @@ HEAD = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537
         "Accept": "application/json, text/plain, */*", "Accept-Language": "en-US,en;q=0.9",
         "Referer": "https://www.nseindia.com/"}
 BASE = "https://www.nseindia.com"
+DIAG = {}          # what each data source returned this run; written to docs/diag.json for checking
 
 
 class NSE:
@@ -37,9 +38,17 @@ class NSE:
             try:
                 h = {"Referer": BASE + referer} if referer else None
                 r = self.s.get(BASE + path, params=params, headers=h, timeout=25)
+                key = path.split("?")[0]
+                d = DIAG.setdefault(key, {"ok": 0, "fail": 0, "codes": []})
                 if r.status_code == 200 and r.content[:1] in (b"{", b"["):
                     self.fails, self.ok = 0, True
+                    d["ok"] += 1
+                    if "sample" not in d:
+                        d["sample"] = r.text[:1500]
                     return r.json()
+                d["fail"] += 1
+                if len(d["codes"]) < 5:
+                    d["codes"].append(r.status_code)
                 if r.status_code in (401, 403):
                     self._warm()
             except Exception:

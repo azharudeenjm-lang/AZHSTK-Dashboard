@@ -216,6 +216,12 @@ def refresh_nse(symbols, priority=(), budget=NSE_BUDGET):
     except Exception:
         pass
     print(f"  NSE results: {ok} of {len(todo)} stocks refreshed, {len(store)} in cache")
+    try:
+        from .nse_api import DIAG
+        DIAG["results_parsed"] = {"with_figures": ok, "tried": len(todo), "cached": len(store),
+                                  "example": next(({k: v} for k, v in store.items() if len(v) > 1), None)}
+    except Exception:
+        pass
     return store
 
 

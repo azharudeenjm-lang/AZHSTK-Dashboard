@@ -66,6 +66,9 @@ dialog.prof::backdrop{background:rgba(10,16,26,.55)}
 .regime b{font-size:.95rem}.regime details{flex-basis:100%}.regime summary{cursor:pointer;color:var(--muted);font-size:.8rem}
 .regime ul{margin:6px 0 0;padding-left:18px;color:var(--muted);font-size:.82rem}
 .pf-act{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.pf-snapm{position:absolute;right:0;top:calc(100% + 4px);z-index:20;min-width:220px;background:var(--p-bg,var(--panel,#fff));border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:4px 0}
+.pf-snapm button{display:block;width:100%;text-align:left;background:none;border:0;color:inherit;font:inherit;font-size:.86rem;padding:8px 12px;cursor:pointer}
+.pf-snapm button:hover,.pf-snapm button:focus-visible{background:var(--line)}
 .pf-btn{font:600 .82rem var(--font,system-ui);border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:8px;padding:6px 12px;cursor:pointer}
 .pf-btn.on{border-color:#C9780F;color:#C9780F}
 .pf-btn.pri{background:var(--ink);color:var(--bg);border-color:var(--ink)}
@@ -333,8 +336,8 @@ function actions(s){
     <a class="pf-btn" href="watchlist.html" style="text-decoration:none">My list</a>
     <button class="pf-btn" data-a="share" aria-expanded="${shareOpen}" title="Share or copy this stock">⤴ Share</button>
     ${shareOpen ? `<div class="pf-share" style="flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px;padding:8px;border:1px solid var(--line);border-radius:10px">
-      <button class="pf-btn" data-a="shimg">🖼 Picture</button><button class="pf-btn" data-a="shtxt">📋 Copy text</button><button class="pf-btn" data-a="shlink">🔗 Copy link</button>
-      <span class="pf-mut" id="pf-shmsg" role="status" style="font-size:.8rem">Picture: chart, zones and fundamentals as an image. Text: a WhatsApp-ready summary.</span></div>` : ""}`;
+      <button class="pf-btn" data-a="shtxt">📋 Copy summary text</button><button class="pf-btn" data-a="shlink">🔗 Copy link</button>
+      <span class="pf-mut" id="pf-shmsg" role="status" style="font-size:.8rem">For a picture of the chart, use the 📷 button above the chart.</span></div>` : ""}`;
 }
 let shareOpen = false;
 const stockLink = s => `${location.origin}${location.pathname.replace(/[^/]*$/,"")}index.html#stock=${encodeURIComponent(s)}`;
@@ -356,52 +359,20 @@ function shareText(p, s, tf){
   L.push(stockLink(s));
   return L.join("\n");
 }
+function snapInfo(p, s, tf){
+  const z = (p.z||{})[tf] || {}, lv = (p.lv||{})[tf] || {}, ew = (p.ew||{})[tf], su = p.su || {}, f = p.fu || {};
+  const L = [];
+  L.push(`Zone: ${z.zone||"–"}${su.bucket?` · Setup: ${su.bucket}`:""}${lv.sup?` · Support ₹${fmt(lv.sup.p,2)}`:""}${lv.res?` · Resistance ₹${fmt(lv.res.p,2)}`:""}`);
+  if (ew && ew.s) L.push(`Elliott (auto): ${ew.s}${ew.tg?` · target ₹${fmt(ew.tg,2)}`:""}${ew.iv?` · wrong ${ew.ivs||"below"} ₹${fmt(ew.iv,2)}`:""}`);
+  const fx = [f.qg?`Quality ${f.qg}`:"", f.pe!=null?`P/E ${fmt(f.pe)}`:"", f.prom!=null?`Promoters ${fmt(f.prom,1)}%`:"", f.plg?`Pledged ${fmt(f.plg,1)}%`:"", f.dlv!=null?`Delivery ${fmt(f.dlv,0)}%`:""].filter(Boolean);
+  if (fx.length) L.push(fx.join(" · "));
+  return {sym: s, name: p.n, px: p.px, r1d: p.r1d, tf, lines: L};
+}
 function shMsg(t){ const el = dlg.querySelector("#pf-shmsg"); if (el) el.textContent = t; }
 async function copyText(t){ try { await navigator.clipboard.writeText(t); return true; } catch(e){
   const ta = document.createElement("textarea"); ta.value = t; ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.select();
   let ok = false; try { ok = document.execCommand("copy"); } catch(e2){} ta.remove(); return ok; } }
-let H2C = null;
-function loadH2C(){ if (window.html2canvas) return Promise.resolve(window.html2canvas);
-  if (!H2C) H2C = new Promise((res, rej)=>{ const sc = document.createElement("script"); sc.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
-    sc.onload = ()=>res(window.html2canvas); sc.onerror = ()=>{ H2C = null; rej(new Error("load")); }; document.head.appendChild(sc); });
-  return H2C; }
-async function sharePicture(p, s, tf){
-  shMsg("Making the picture…");
-  let h2c; try { h2c = await loadH2C(); } catch(e){ shMsg("Couldn't load the picture maker (no internet?). Use Copy text instead."); return; }
-  const root = dlg.querySelector(".pf"), cs = getComputedStyle(root);
-  const resolve = v => v.replace(/var\((--[\w-]+)(?:,\s*([^)]+))?\)/g, (m, name, fb) => (cs.getPropertyValue(name).trim() || (fb||"").trim() || "#888"));
-  const bg = getComputedStyle(dlg).backgroundColor || "#fff";
-  let canvas;
-  try {
-    canvas = await h2c(root, { scale: 2, backgroundColor: bg, useCORS: true, logging: false, windowWidth: root.scrollWidth,
-      height: undefined, scrollY: 0,
-      onclone: doc => {
-        const r = doc.querySelector("dialog .pf") || doc.querySelector(".pf"); if (!r) return;
-        r.style.maxHeight = "none"; r.style.overflow = "visible"; r.scrollTop = 0;
-        const dl_ = r.closest("dialog"); if (dl_){ dl_.style.maxHeight = "none"; dl_.style.overflow = "visible"; dl_.style.position = "absolute"; dl_.style.top = "0"; }
-        r.querySelectorAll(".pf-act, .pf-x, .pf-lk, .pf-share, form, details, [id$='-r'], .pf-trade").forEach(e=>e.remove());
-        r.querySelectorAll(".pf-sec").forEach(sec=>{ const h = (sec.querySelector("h3")||{}).textContent || "";
-          if (!/^(Price chart|Fundamentals)/.test(h.trim())) sec.remove(); });
-        r.querySelectorAll("svg, svg *").forEach(e=>{ for (const at of ["fill","stroke","style","stop-color"]){ const v = e.getAttribute(at); if (v && v.includes("var(")) e.setAttribute(at, resolve(v)); } });
-        const ft = doc.createElement("p"); ft.style.cssText = "font-size:12px;margin:10px 0 0;color:#777";
-        ft.textContent = `AZHSTK dashboard · ${new Date().toLocaleString("en-IN",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})} · for information, not investment advice`;
-        r.appendChild(ft);
-      } });
-  } catch(e){ shMsg("Couldn't make the picture on this device. Use Copy text instead."); return; }
-  const blob = await new Promise(r=>canvas.toBlob(r, "image/png"));
-  if (!blob){ shMsg("Couldn't make the picture. Use Copy text instead."); return; }
-  const file = new File([blob], `${s}-${tf==="w"?"weekly":"daily"}.png`, {type:"image/png"});
-  const text = shareText(p, s, tf);
-  try {
-    if (navigator.canShare && navigator.canShare({files:[file]})){ await navigator.share({files:[file], text, title: s}); shMsg("Shared."); return; }
-  } catch(e){ if (e && e.name === "AbortError"){ shMsg("Share cancelled."); return; } }
-  try {
-    if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write){ await navigator.clipboard.write([new ClipboardItem({"image/png": blob})]);
-      shMsg("Picture copied. Paste it into WhatsApp (Ctrl+V). Use Copy text for the summary."); return; }
-  } catch(e){}
-  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
-  shMsg("Picture downloaded. Attach it in WhatsApp.");
-}
+
 function earnWarn(p){
   if (!p.earn) return "";
   const days = Math.round((new Date(p.earn+"T00:00:00") - new Date(new Date().toDateString())) / 864e5);
@@ -437,7 +408,7 @@ function wireActions(){
       if (navigator.share && /Android|iPhone|iPad/i.test(navigator.userAgent)){ navigator.share({text: t}).then(()=>shMsg("Shared.")).catch(()=>copyText(t).then(ok=>shMsg(ok?"Summary copied.":"Couldn't copy."))); }
       else copyText(t).then(ok=>shMsg(ok ? "Summary copied. Paste it into WhatsApp." : "Couldn't copy on this browser.")); }
     if (a==="shlink"){ copyText(stockLink(s)).then(ok=>shMsg(ok ? "Link copied." : "Couldn't copy.")); }
-    if (a==="shimg"){ sharePicture(curData, s, curTF==="m"?"w":curTF); }
+
     if (a==="cancel"){ formOpen = false; render(); }
     if (a==="del"){ d.trades = d.trades.filter(t=>!(t.sym===s && !t.closed)); WL.save(d); formOpen=false; render(); }
   });
@@ -567,7 +538,7 @@ function render(){
       <small>support ${lv.sup?`₹${fmt(lv.sup.p,2)} (−${fmt(lv.sup.d)}%)`:"–"}</small><small>resistance ${lv.res?`₹${fmt(lv.res.p,2)} (+${fmt(lv.res.d)}%)`:"–"}</small></div>
   </div>
 
-  <div class="pf-sec"><h3>Price chart (${tf==="w"?"weekly":"daily"} candles)</h3>${chart(z, lv, dates, tf, (p.fib||{})[tf], {pat: (p.pat||{})[tf], ew: (p.ew||{})[tf], sym: s})}
+  <div class="pf-sec"><h3>Price chart (${tf==="w"?"weekly":"daily"} candles)</h3>${chart(z, lv, dates, tf, (p.fib||{})[tf], {pat: (p.pat||{})[tf], ew: (p.ew||{})[tf], sym: s, snap: snapInfo(p, s, tf)})}
     <div class="pf-key">${["Bullish","Strong momentum","Extended","Divergence zone","Bearish","Oversold","Accumulation","Neutral"].map(k=>`<span><i style="--c:var(${ZC[k]})"></i>${k}</span>`).join("")}</div></div>
 
   ${fibBlock((p.fib||{})[tf], tf, p.px)}
@@ -704,7 +675,7 @@ function chart(z, lv, dates, tf, fb, opt){
   if (dates.length){ [0, Math.floor((n-1)/2), n-1].forEach((i,k)=>{ g += `<text x="${X(i)}" y="${H-7}" font-size="11" fill="var(--muted)" text-anchor="${["start","middle","end"][k]}">${dl(dates[i])}</text>`; }); }
   g += `<line class="cx" x1="0" x2="0" y1="${P.t}" y2="${H-P.b}" stroke="var(--muted)" stroke-dasharray="3 3" visibility="hidden"/>`;
   const btn = (k, label) => `<button type="button" class="pf-btn ${T[k]?'on':''}" data-ct="${k}" aria-pressed="${!!T[k]}" style="padding:3px 9px;font-size:.76rem">${label}</button>`;
-  const html = `<div class="pf-act" style="margin:0 0 6px">${btn("zones","Zones")}${btn("sr","Support / resistance")}${btn("tl","Trendlines")}${btn("fib","Fibonacci")}${btn("pat","Pattern")}${btn("ew","Elliott")}${btn("ma","MA 20 / 50")}</div>
+  const html = `<div class="pf-act" style="margin:0 0 6px">${btn("zones","Zones")}${btn("sr","Support / resistance")}${btn("tl","Trendlines")}${btn("fib","Fibonacci")}${btn("pat","Pattern")}${btn("ew","Elliott")}${btn("ma","MA 20 / 50")}<span style="position:relative;margin-left:auto"><button type="button" class="pf-btn" data-snap aria-haspopup="menu" aria-expanded="false" title="Chart snapshot" style="padding:3px 10px;font-size:.9rem">📷</button><div class="pf-snapm" role="menu" hidden></div></span></div>
     ${T.ew && ew && ew.s ? `<div style="font-size:.8rem;margin:0 0 4px"><b style="color:${ew.d==="up"?"#1F6FB2":"#B5338A"}">Elliott (auto count):</b> ${esc(ew.s)}${ew.tg?` · target ₹${fmt(ew.tg,2)}`:""}${ew.iv?` · count is wrong ${ew.ivs||(ew.d==="up"?"below":"above")} ₹${fmt(ew.iv,2)}`:""}</div>` : ""}
     <div class="pf-act" style="margin:0 0 6px" role="group" aria-label="Zoom">${ZO.map(([lab,b])=>`<button type="button" class="pf-btn ${want===b?'on':''}" data-cz="${b}" aria-pressed="${want===b}" style="padding:3px 9px;font-size:.76rem">${lab}</button>`).join("")}</div>
     <div class="pf-mut" id="${id}-r" style="font-size:.78rem;min-height:1.2em">${loading ? "Loading older prices… " : ""}${n} ${tf==="w"?"weeks":"sessions"} shown${step < 2.2 ? " (closing-price line; zoom in for candles)" : ""}. Tap or hover for prices.</div>
@@ -718,6 +689,37 @@ function chart(z, lv, dates, tf, fb, opt){
       r.innerHTML = `<b>${dl(dates[i])}</b> · O ${fmt(o[i],2)} · H ${fmt(h[i],2)} · L ${fmt(l[i],2)} · C ${fmt(c[i],2)}${ch!=null?` (${pct(ch,2)})`:""}`; };
     svg.addEventListener("pointermove", show); svg.addEventListener("pointerdown", show);
     const wrap = svg.parentElement;
+    const sb = wrap.querySelector("[data-snap]"), sm = wrap.querySelector(".pf-snapm");
+    if (sb && sm){
+      const canFiles = !!(navigator.canShare && (()=>{ try { return navigator.canShare({files:[new File([""],"a.png",{type:"image/png"})]}); } catch(e){ return false; } })());
+      const items = [["dl","⬇ Download image"],["copy","⧉ Copy image"],["link","🔗 Copy link"],["tab","↗ Open in new tab"]];
+      if (canFiles) items.unshift(["share","⤴ Share image (WhatsApp…)"]);
+      sm.innerHTML = `<div class="pf-mut" style="font-size:.7rem;letter-spacing:.06em;padding:4px 10px">CHART SNAPSHOT</div>` +
+        items.map(([k,l])=>`<button type="button" role="menuitem" data-sn="${k}">${l}</button>`).join("") + `<div class="pf-mut" data-snmsg style="font-size:.75rem;padding:4px 10px;max-width:230px"></div>`;
+      const msg = t => { const m = sm.querySelector("[data-snmsg]"); if (m) m.textContent = t; };
+      const close = () => { sm.hidden = true; sb.setAttribute("aria-expanded","false"); document.removeEventListener("pointerdown", outside, true); };
+      const outside = ev => { if (!sm.contains(ev.target) && ev.target !== sb) close(); };
+      sb.onclick = () => { if (!sm.hidden){ close(); return; } sm.hidden = false; sb.setAttribute("aria-expanded","true"); msg(""); document.addEventListener("pointerdown", outside, true); };
+      const info = opt.snap || {sym: opt.sym, tf};
+      const fname = `${info.sym||"chart"}-${tf==="w"?"weekly":"daily"}-${new Date().toISOString().slice(0,10)}.png`;
+      sm.querySelectorAll("[data-sn]").forEach(b=>b.onclick=()=>{
+        const k = b.dataset.sn;
+        if (k==="link"){ copyText(stockLink(info.sym||"")).then(ok=>msg(ok?"Link copied.":"Couldn't copy the link.")); return; }
+        if (k==="copy"){
+          if (!(window.ClipboardItem && navigator.clipboard && navigator.clipboard.write)){ msg("This browser can't copy images. Use Download image."); return; }
+          // the image is passed as a promise so the browser still treats it as part of the click
+          navigator.clipboard.write([new ClipboardItem({"image/png": snapBlob(svg, info, W, H)})])
+            .then(()=>msg("Image copied. Paste it in WhatsApp (Ctrl+V)."))
+            .catch(()=>msg("Copy blocked by this browser (often on office laptops). Use Download image."));
+          return; }
+        if (k==="tab"){ const w = window.open("", "_blank");
+          snapBlob(svg, info, W, H).then(bl=>{ const u = URL.createObjectURL(bl); if (w) w.location = u; else { saveBlob(bl, fname); msg("Pop-up blocked, so it was downloaded."); } }); return; }
+        snapBlob(svg, info, W, H).then(bl=>{
+          if (k==="share"){ const f = new File([bl], fname, {type:"image/png"});
+            navigator.share({files:[f], title: info.sym}).then(()=>{ close(); }).catch(e=>{ if (!e || e.name!=="AbortError"){ saveBlob(bl, fname); msg("Sharing failed, so it was downloaded."); } }); return; }
+          saveBlob(bl, fname); msg("Downloaded."); }).catch(()=>msg("Couldn't make the image."));
+      });
+    }
     wrap.querySelectorAll("[data-cz]").forEach(b=>b.onclick=()=>{ const t = chOpts(); t["z"+tf] = +b.dataset.cz;
       try { localStorage.setItem(CH_KEY, JSON.stringify(t)); } catch(e){}
       if (opt.redraw) opt.redraw(); else if (dlg && dlg.open) render(); });
@@ -726,6 +728,46 @@ function chart(z, lv, dates, tf, fb, opt){
       if (opt.redraw) opt.redraw(); else if (dlg && dlg.open) render(); });
   }, 0);
   return opt.bare ? html : `<div>${html}</div>`;
+}
+function saveBlob(bl, name){ const a = document.createElement("a"); a.href = URL.createObjectURL(bl); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 4000); }
+// Picture of the chart: the chart's own SVG drawn onto a canvas with a title bar and a footer.
+// No page capture, so it is quick and light on memory.
+function snapBlob(svg, info, W, H){
+  return new Promise((resolve, reject)=>{
+    const host = svg.closest(".pf") || document.body, cs = getComputedStyle(host);
+    const rv = v => v.replace(/var\((--[\w-]+)(?:,\s*([^)]+))?\)/g, (m, n, fb) => (cs.getPropertyValue(n).trim() || (fb||"").trim() || "#888"));
+    const cl = svg.cloneNode(true);
+    cl.setAttribute("xmlns", "http://www.w3.org/2000/svg"); cl.setAttribute("width", W); cl.setAttribute("height", H);
+    cl.querySelectorAll(".cx").forEach(e=>e.remove());
+    [cl, ...cl.querySelectorAll("*")].forEach(e=>{ for (const at of ["fill","stroke","style","stop-color"]){ const v = e.getAttribute(at); if (v && v.includes("var(")) e.setAttribute(at, rv(v)); } });
+    const font = cs.fontFamily || "system-ui, sans-serif";
+    cl.setAttribute("style", `font-family:${font}`);
+    const img = new Image();
+    img.onload = () => {
+      const lines = (info.lines || []).filter(Boolean), top = 58, foot = 26 + lines.length * 19, S = 2;
+      const cv = document.createElement("canvas"); cv.width = W * S; cv.height = (top + H + foot) * S;
+      const g = cv.getContext("2d"); g.scale(S, S);
+      const bg = getComputedStyle(svg.closest("dialog") || document.body).backgroundColor;
+      g.fillStyle = (!bg || bg === "rgba(0, 0, 0, 0)") ? "#ffffff" : bg; g.fillRect(0, 0, W, top + H + foot);
+      const ink = cs.getPropertyValue("--ink").trim() || "#16243A", mut = cs.getPropertyValue("--muted").trim() || "#5C6B80";
+      g.fillStyle = ink; g.font = `700 20px ${font}`; g.textBaseline = "alphabetic";
+      const t1 = `${info.sym || ""}`; g.fillText(t1, 10, 26);
+      let x = 18 + g.measureText(t1).width;
+      if (info.px != null){ g.font = `600 17px ${font}`; const pt = `₹${Number(info.px).toLocaleString("en-IN",{maximumFractionDigits:2})}`; g.fillText(pt, x, 26); x += 10 + g.measureText(pt).width;
+        if (info.r1d != null){ g.fillStyle = info.r1d >= 0 ? (cs.getPropertyValue("--up").trim()||"#1E8F5A") : (cs.getPropertyValue("--down").trim()||"#C2453B");
+          g.fillText(`${info.r1d>0?"+":""}${Number(info.r1d).toFixed(2)}%`, x, 26); } }
+      g.fillStyle = mut; g.font = `400 13px ${font}`;
+      g.fillText(`${info.name ? info.name + " · " : ""}${info.tf==="w"?"Weekly":"Daily"} candles · ${new Date().toLocaleString("en-IN",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})}`, 10, 46);
+      g.drawImage(img, 0, top, W, H);
+      g.fillStyle = ink; g.font = `500 13px ${font}`;
+      lines.forEach((t, i)=>g.fillText(t, 10, top + H + 18 + i * 19));
+      g.fillStyle = mut; g.font = `400 11px ${font}`;
+      g.fillText("AZHSTK dashboard · for information, not investment advice", 10, top + H + foot - 8);
+      cv.toBlob(b => b ? resolve(b) : reject(new Error("blob")), "image/png");
+    };
+    img.onerror = () => reject(new Error("svg"));
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(new XMLSerializer().serializeToString(cl));
+  });
 }
 const LONG = {}, LONGV = {};
 function loadLong(sym){ const k = shard(sym);
