@@ -235,6 +235,15 @@ def main():
     except Exception as e:
         print(f"  ! buy criteria skipped: {str(e)[:120]}")
         by_rec = {}
+    # TAM screener: seven scanners + strict filter, refreshed on every update
+    try:
+        from src import tam, tam_page
+        tp = tam.build(px, stocks, sectors, nws, fu, BENCHMARK, circuit=circuit, intraday=a.intraday,
+                       live=reg.get("live"), demo=a.demo)
+        tam_page.render(clean(tp))
+        print(f"  TAM screener: {len(tp['rows'])} names, {len(tp['strict'])} strict, action: {(tp['action'] or {}).get('sym', 'cash')}")
+    except Exception as e:
+        print(f"  ! TAM screener skipped: {str(e)[:150]}")
     for tf in ("d", "w"):
         sg[tf] = {t: r for t, r in sg[tf].items() if r}
     ser = series.build(px, tick)
