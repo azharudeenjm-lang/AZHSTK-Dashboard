@@ -218,7 +218,7 @@ def main():
             print(f"  ! NSE results skipped: {str(e)[:100]}")
             nse_f = fundm.load_nse()
     fu = fundm.combine(stocks, fund, nse_f, own_facts)
-    by_rec, tp = {}, None
+    by_rec, tp, tt_rec = {}, None, {}
     # Buy criteria tab: weekly momentum breakouts with stop-loss and trailing stop
     from src import buy, buy_page
     try:
@@ -234,6 +234,16 @@ def main():
             print(f"  3-touch trendlines: {len(t3_page['brk'])} breakouts in 26 weeks, {len(t3_page['near'])} near the line")
         except Exception as e:
             print(f"  ! 3-touch trendlines skipped: {str(e)[:120]}")
+        try:            # Minervini Trend Template (Stage 2 filter)
+            from src import template
+            tt_page, tt_rec, tt_sc = template.build(px, stocks)
+            by_page["tt"] = tt_page
+            for tf in ("d", "w"):
+                for t, r in tt_sc.items():
+                    sg[tf].setdefault(t, {}).update(r)
+            print(f"  trend template: {tt_page['n_all']} pass all 8, {len(tt_page['near'])} pass 7")
+        except Exception as e:
+            print(f"  ! trend template skipped: {str(e)[:120]}")
         buy_page.render(clean(by_page))
         for t, r in by_sc.items():
             sg["w"].setdefault(t, {}).update(r)
@@ -309,7 +319,7 @@ def main():
     profiles.write(clean(stocks), clean(sectors), clean({"d": zd, "w": zw}), clean({"d": hd, "w": hw}),
                    clean({"d": ld, "w": lw}), fmap, {"d": dates_d, "w": dates_w}, gen,
                    {"partial": partial, "asof": asof}, clean(su), clean(mon),
-                   extra={"rs": rs, "earn": earn, "fib": clean(fibs), "sg": sg, "ser": clean(ser), "geo": clean(geo), "ew": clean(ewg), "nw": nws, "fu": clean(fu), "al": own_al, "by": clean(by_rec), "th": th_chips})
+                   extra={"rs": rs, "earn": earn, "fib": clean(fibs), "sg": sg, "ser": clean(ser), "geo": clean(geo), "ew": clean(ewg), "nw": nws, "fu": clean(fu), "al": own_al, "by": clean(by_rec), "th": th_chips, "tt": clean(tt_rec)})
     try:
         profiles.write_long(px, tick, {"d": dates_d, "w": dates_w})
     except Exception as e:
