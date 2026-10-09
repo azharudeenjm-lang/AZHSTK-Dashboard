@@ -218,10 +218,22 @@ def main():
             print(f"  ! NSE results skipped: {str(e)[:100]}")
             nse_f = fundm.load_nse()
     fu = fundm.combine(stocks, fund, nse_f, own_facts)
+    by_rec, tp = {}, None
     # Buy criteria tab: weekly momentum breakouts with stop-loss and trailing stop
     from src import buy, buy_page
     try:
         by_page, by_rec, by_sc, by_frames = buy.build(px, stocks, fu, earn)
+        try:            # three-touch falling trendline breakouts (weekly)
+            from src import trend3
+            t3_page, t3_sc, t3_geo = trend3.build(px, stocks, by_frames.get("rs"))
+            by_page["t3"] = t3_page
+            for t, r in t3_sc.items():
+                sg["w"].setdefault(t, {}).update(r)
+            for t, g in t3_geo.items():
+                geo["w"].setdefault(t, []).append(g)
+            print(f"  3-touch trendlines: {len(t3_page['brk'])} breakouts in 26 weeks, {len(t3_page['near'])} near the line")
+        except Exception as e:
+            print(f"  ! 3-touch trendlines skipped: {str(e)[:120]}")
         buy_page.render(clean(by_page))
         for t, r in by_sc.items():
             sg["w"].setdefault(t, {}).update(r)
@@ -246,6 +258,29 @@ def main():
         print(f"  TAM screener: {len(tp['rows'])} names, {len(tp['strict'])} strict, action: {(tp['action'] or {}).get('sym', 'cash')}")
     except Exception as e:
         print(f"  ! TAM screener skipped: {str(e)[:150]}")
+    # Themes tab: structural themes, their baskets, rotation and news history
+    th_chips = {}
+    try:
+        from src import themes as themesmod, themes_page
+        th_list = themesmod.load_themes()
+        if a.demo:          # demo symbols are made up: give each theme a slice of them so the page can be checked
+            syms_ = [s_["sym"] for s_ in stocks]
+            th_list = [{**t, "stocks": syms_[i * 9:(i + 1) * 9]} for i, t in enumerate(th_list)]
+        if a.demo:
+            th_news = themesmod.update_news(th_list, demo=True)
+        elif a.intraday or a.no_news:
+            th_news = themesmod.load_news()
+        else:
+            th_news = themesmod.update_news(th_list)
+        th_page, th_chips, th_sc = themesmod.build(px, stocks, BENCHMARK, th_list, {"d": zd, "w": zw},
+                                                     by_rec, (tp or {}).get("rows") or [], th_news)
+        themes_page.render(clean(th_page))
+        for tf in ("d", "w"):
+            for t, r in th_sc.items():
+                sg[tf].setdefault(t, {}).update(r)
+        print(f"  themes: {len(th_page['themes'])} themes, " + ", ".join(f"{x['name'].split(':')[0]} {x['state']}" for x in th_page["themes"][:4]))
+    except Exception as e:
+        print(f"  ! themes skipped: {str(e)[:150]}")
     for tf in ("d", "w"):
         sg[tf] = {t: r for t, r in sg[tf].items() if r}
     ser = series.build(px, tick)
@@ -274,7 +309,7 @@ def main():
     profiles.write(clean(stocks), clean(sectors), clean({"d": zd, "w": zw}), clean({"d": hd, "w": hw}),
                    clean({"d": ld, "w": lw}), fmap, {"d": dates_d, "w": dates_w}, gen,
                    {"partial": partial, "asof": asof}, clean(su), clean(mon),
-                   extra={"rs": rs, "earn": earn, "fib": clean(fibs), "sg": sg, "ser": clean(ser), "geo": clean(geo), "ew": clean(ewg), "nw": nws, "fu": clean(fu), "al": own_al, "by": clean(by_rec)})
+                   extra={"rs": rs, "earn": earn, "fib": clean(fibs), "sg": sg, "ser": clean(ser), "geo": clean(geo), "ew": clean(ewg), "nw": nws, "fu": clean(fu), "al": own_al, "by": clean(by_rec), "th": th_chips})
     try:
         profiles.write_long(px, tick, {"d": dates_d, "w": dates_w})
     except Exception as e:
