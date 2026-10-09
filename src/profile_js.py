@@ -806,6 +806,13 @@ mountRegime();
   const after = nav.querySelector('a[href="setups.html"]') || nav.lastElementChild;
   after ? after.insertAdjacentElement("afterend", a) : nav.appendChild(a);
 })();
+(function addTamLink(){
+  setTimeout(()=>{ const nav = document.querySelector("header nav"); if (!nav || nav.querySelector('a[href="tam.html"]')) return;
+    const a = document.createElement("a"); a.href = "tam.html"; a.textContent = "TAM screener";
+    if (nav.querySelector("a")) a.style.cssText = nav.querySelector("a").style.cssText;
+    const after = nav.querySelector('a[href="forward.html"]') || nav.querySelector('a[href="buy.html"]') || nav.lastElementChild;
+    after ? after.insertAdjacentElement("afterend", a) : nav.appendChild(a); }, 0);
+})();
 (function addForwardLink(){
   setTimeout(()=>{ const nav = document.querySelector("header nav"); if (!nav || nav.querySelector('a[href="forward.html"]')) return;
     const a = document.createElement("a"); a.href = "forward.html"; a.textContent = "Forward test";

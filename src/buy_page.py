@@ -38,7 +38,7 @@ TEMPLATE = r"""
 <header>
   <h1>Buy criteria</h1>
   <div id="gsearch"></div>
-  <nav aria-label="Dashboards"><a href="index.html">Sector rotation</a><a href="zones.html">Zones</a><a href="levels.html">Levels</a><a href="setups.html">Setups</a><a href="buy.html" aria-current="page">Buy criteria</a><a href="forward.html">Forward test</a><a href="watchlist.html">My list</a><a href="backtest.html">Backtest</a></nav>
+  <nav aria-label="Dashboards"><a href="index.html">Sector rotation</a><a href="zones.html">Zones</a><a href="levels.html">Levels</a><a href="setups.html">Setups</a><a href="buy.html" aria-current="page">Buy criteria</a><a href="forward.html">Forward test</a><a href="tam.html">TAM screener</a><a href="watchlist.html">My list</a><a href="backtest.html">Backtest</a></nav>
 </header>
 <p class="stamp" id="gen"></p>
 

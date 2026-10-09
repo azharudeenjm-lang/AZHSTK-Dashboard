@@ -32,7 +32,7 @@ svg.eq{width:100%;height:auto;display:block}
 <header>
   <h1>Forward test</h1>
   <div id="gsearch"></div>
-  <nav aria-label="Dashboards"><a href="index.html">Sector rotation</a><a href="zones.html">Zones</a><a href="levels.html">Levels</a><a href="setups.html">Setups</a><a href="buy.html">Buy criteria</a><a href="forward.html" aria-current="page">Forward test</a><a href="watchlist.html">My list</a><a href="backtest.html">Backtest</a></nav>
+  <nav aria-label="Dashboards"><a href="index.html">Sector rotation</a><a href="zones.html">Zones</a><a href="levels.html">Levels</a><a href="setups.html">Setups</a><a href="buy.html">Buy criteria</a><a href="forward.html" aria-current="page">Forward test</a><a href="tam.html">TAM screener</a><a href="watchlist.html">My list</a><a href="backtest.html">Backtest</a></nav>
 </header>
 <p class="stamp" id="gen"></p>
 <section class="panel">
