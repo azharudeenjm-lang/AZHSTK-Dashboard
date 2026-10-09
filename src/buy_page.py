@@ -62,6 +62,8 @@ TEMPLATE = r"""
     <button role="tab" data-v="open" aria-selected="true">Signals and open trades</button>
     <button role="tab" data-v="watch" aria-selected="false">Watch list</button>
     <button role="tab" data-v="exits" aria-selected="false">Recent exits</button>
+    <button role="tab" data-v="tt" aria-selected="false">Trend Template 8/8</button>
+    <button role="tab" data-v="tt7" aria-selected="false">Trend Template 7/8</button>
     <button role="tab" data-v="t3" aria-selected="false">3-touch trendline breakouts</button>
     <button role="tab" data-v="t3n" aria-selected="false">Near a 3-touch trendline</button>
   </div>
@@ -118,6 +120,14 @@ function draw(){
     hint.innerHTML = "Leaders near their highs, within 5% of the 12-week breakout level. A weekly close above both trigger levels makes it a signal.";
     t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Price</th><th>Breakout level</th><th>Distance</th><th>Weekly close needed (with +8%)</th><th>RS</th><th>From 52-wk high</th><th class="l">Notes</th></tr></thead><tbody>${rows.map(r=>`<tr>
       ${nm(r)}<td>₹${fmt(r.price)}</td><td>₹${fmt(r.trig)}</td><td>${fmt(r.dist,1)}%</td><td><b>₹${fmt(r.need8)}</b></td><td>${r.rs??"–"}</td><td>${pc(r.hi52)}</td><td class="l">${flags(r.flags)}</td></tr>`).join("") || '<tr><td colspan="8" class="mut">Nothing close to triggering.</td></tr>'}</tbody>`;
+  } else if (view==="tt" || view==="tt7"){
+    const T = D.tt || {all:[], near:[]}, rows = (view==="tt" ? T.all : T.near).filter(keep);
+    hint.innerHTML = view==="tt" ? `Minervini's Stage 2 filter: price above the 50, 150 and 200-day MAs in that order, the 200-day rising, 30%+ above the 52-week low, within 25% of the high, RS 70+. ${rows.length} stocks pass. <b>Leader</b> = RS 90+ and within 5% of the 52-week high: in testing these did about twice as well as all passes (48% won, about +15% per trade vs +7%). Exit guide: a close below the 50-day MA.`
+      : "Stocks passing 7 of the 8 checks, with the one that is missing.";
+    t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Price</th><th>RS</th><th>From 52-wk high</th><th>Above 52-wk low</th><th>${view==="tt"?"Passing since":"Missing"}</th><th>Exit below (50-day MA)</th><th>Room</th><th>Qty</th></tr></thead><tbody>${rows.map(r=>`<tr>
+      ${nm(r)}<td>₹${fmt(r.price)}</td><td><b>${r.rs??"–"}</b>${r.lead?'<span class="new">leader</span>':""}</td><td>${pc(r.hi)}</td><td>+${fmt(r.lo,0)}%</td>
+      <td class="${view==="tt"?"":"l"}" style="white-space:normal">${view==="tt" ? (r.since?`${dl(r.since)} <small class="mut">(${r.days} sessions)</small>`:"–") : esc(r.missing.join("; "))}${view==="tt"&&r.ideal?'<small class="ok" style="display:block">200-day rising 4+ months</small>':""}</td>
+      <td>₹${fmt(r.exit)}</td><td>${pc(r.room)}</td><td>${qty(r.price, r.exit)}</td></tr>`).join("") || '<tr><td colspan="9" class="mut">None.</td></tr>'}</tbody>`;
   } else if (view==="t3" || view==="t3n"){
     const T = D.t3 || {brk:[], near:[]};
     const tl = r => `${r.touches} touches: ${r.tdates.map(d=>dl(d)).join(", ")} · ${r.span} weeks from the top ₹${fmt(r.top)} (${dl(r.top_d)})`;

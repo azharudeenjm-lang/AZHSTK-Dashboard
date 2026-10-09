@@ -537,6 +537,8 @@ function render(){
   ${earnWarn(p)}${tradeBox(s, p)}
   ${setupStrip(p.su)}
   ${buyStrip(p)}
+  ${p.tt ? `<details style="margin:0 0 10px"><summary style="cursor:pointer;font-size:.88rem"><b>Trend Template: ${p.tt.k}/8</b> ${p.tt.k===8?'<span class="pchip" style="--c:#1E8F5A">Stage 2</span>':'<span class="pchip o" style="--c:#C9780F">one check missing</span>'} <span class="pf-mut">RS ${p.tt.rs??"–"} · ${p.tt.hi!=null?p.tt.hi+"% from the 52-week high":""}${p.tt.k===8&&p.tt.days?` · passing ${p.tt.days} sessions`:""} · exit guide: a close below the 50-day MA ₹${fmt(p.tt.exit,2)}</span></summary>
+    <ul style="list-style:none;margin:6px 0 0;padding:0;font-size:.84rem">${p.tt.checks.map(([l,ok,v])=>`<li style="padding:2px 0"><b class="${ok?'pf-ok':'pf-bad'}">${ok?'✓':'✗'}</b> ${esc(l)} <span class="pf-mut">· ${esc(v)}</span></li>`).join("")}${p.tt.ideal?'<li class="pf-mut" style="padding:2px 0">200-day MA rising 4+ months: ideal</li>':""}</ul></details>` : ""}
   ${(p.th||[]).length ? `<p style="font-size:.85rem;margin:0 0 10px"><span class="pf-mut">Themes:</span> ${p.th.map(t=>`<a href="themes.html#${esc(t.id)}" class="pchip o" style="--c:${({Leading:"#1E8F5A",Improving:"#2F62C8",Weakening:"#C9780F",Lagging:"#C2453B"})[t.state]||"#5B6472"};text-decoration:none;margin-right:4px">${esc(t.name)}${t.state?" · "+t.state:""}</a>`).join("")}</p>` : ""}
   ${fundBlock(p)}
   ${newsBlock(p)}
