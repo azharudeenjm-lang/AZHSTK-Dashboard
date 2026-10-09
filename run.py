@@ -240,6 +240,8 @@ def main():
         from src import tam, tam_page
         tp = tam.build(px, stocks, sectors, nws, fu, BENCHMARK, circuit=circuit, intraday=a.intraday,
                        live=reg.get("live"), demo=a.demo)
+        tp = tam.track(tp, px, BENCHMARK, demo=a.demo)
+        tp.pop("_plans", None)
         tam_page.render(clean(tp))
         print(f"  TAM screener: {len(tp['rows'])} names, {len(tp['strict'])} strict, action: {(tp['action'] or {}).get('sym', 'cash')}")
     except Exception as e:
