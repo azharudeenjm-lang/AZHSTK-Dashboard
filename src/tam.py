@@ -97,10 +97,11 @@ def build(px, stocks, sectors, news, fu, benchmark, circuit=None, intraday=False
     cols = [s["sym"] + ".NS" for s in stocks if s.get("liquid") and s["sym"] + ".NS" in px["Close"].columns]
     O, H, L, C, V = (px[f][cols] for f in ("Open", "High", "Low", "Close", "Volume"))
     last_day = C.index[-1]
-    asof = f"{last_day:%d %b %Y}" + (f", {live}" if live else ", close")
+    in_session = last_day.date() == now.date() and now.weekday() < 5 and (now.hour * 60 + now.minute) < 15 * 60 + 30
+    asof = f"{last_day:%d %b %Y}" + (f", {live}" if live else (f", {now:%I:%M %p} IST (market open, about 15 min delayed)" if in_session else ", close"))
     # volume: projected to a full day while the market is open
     frac = 1.0
-    if intraday and last_day.date() == now.date():
+    if (intraday or in_session) and last_day.date() == now.date():
         mins = (now.hour * 60 + now.minute) - (9 * 60 + 15)
         frac = float(np.clip(mins / 375, 0.15, 1.0))
     avg20 = V.shift(1).rolling(20, min_periods=15).mean().iloc[-1]
@@ -350,3 +351,138 @@ def build(px, stocks, sectors, news, fu, benchmark, circuit=None, intraday=False
             "stale": bool(stale), "index": idx, "rows": rows, "strict": [r["sym"] for r in strict],
             "leave": sorted(leave, key=lambda x: -(x.get("chg") or 0))[:80], "action": action,
             "lead": sorted(lead), "weakest": weakest, "scan_names": SCAN, "mtf": MTF_DAY}
+
+
+# ---------------------------------------------------------------- trade tracking
+PLANS = CACHE / "tam_plans.json"
+WAIT_DAYS, MAX_HOLD = 5, 15        # sessions to wait for the entry zone; maximum holding period
+
+
+def _load_plans():
+    try:
+        return json.loads(PLANS.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    import os
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    if repo:
+        try:
+            import requests
+            r = requests.get(f"https://raw.githubusercontent.com/{repo}/gh-pages/tam_plans.json", timeout=20)
+            if r.ok and r.text.startswith("["):
+                return r.json()
+        except Exception:
+            pass
+    return []
+
+
+def _replay(p, O, H, L, C, bench):
+    """Follow one plan through the daily bars after its signal day. Returns the plan with status fields."""
+    t = p["sym"] + ".NS"
+    out = {**p, "status": "waiting", "entry": None, "ed": None, "exit": None, "xd": None, "why": None, "t1_hit": None,
+           "pct": None, "last": None}
+    if t not in C.columns:
+        out["status"] = "no data"
+        return out
+    d0 = pd.Timestamp(p["sd"][:10])
+    idx = [d for d in C.index if d > d0]
+    zlo, zhi, sl, t1, t2 = p["zone"][0], p["zone"][1], p["sl"], p["t1"], p["t2"]
+    stop, half, waited, held = sl, False, 0, 0
+    last = C[t].dropna()
+    out["last"] = _r(last.iloc[-1]) if len(last) else None
+    for d in idx:
+        o, h, l, c = O.at[d, t], H.at[d, t], L.at[d, t], C.at[d, t]
+        if not np.isfinite(c):
+            continue
+        nb = bench.get(d) if bench is not None else None
+        if out["status"] == "waiting":
+            waited += 1
+            if l < sl:                                    # traded through the planned SL before any fill
+                out.update(status="cancelled", why="Price went below the SL before the entry zone was reached", xd=d.strftime("%Y-%m-%d"))
+                break
+            if p.get("nifty") and nb is not None and nb < p["nifty"]:
+                out.update(status="cancelled", why=f"NIFTY closed below {p['nifty']:,.0f}", xd=d.strftime("%Y-%m-%d"))
+                break
+            if l <= zhi:                                  # limit order inside the zone gets filled
+                fill = min(zhi, o) if np.isfinite(o) else zhi
+                fill = max(fill, zlo) if l <= zlo else fill
+                out.update(status="open", entry=_r(fill), ed=d.strftime("%Y-%m-%d"))
+            elif waited >= WAIT_DAYS:
+                out.update(status="expired", why=f"Entry zone not reached in {WAIT_DAYS} sessions", xd=d.strftime("%Y-%m-%d"))
+                break
+            else:
+                continue
+        # open position (a fill on this bar is checked against this bar's close too)
+        held += 1
+        e = out["entry"]
+        if not half and h >= t1:                          # book 50% at T1, stop to breakeven on the rest
+            half = True
+            out["t1_hit"] = d.strftime("%Y-%m-%d")
+            stop = max(stop, e)
+        if half and h >= t2:
+            out.update(status="closed", exit=_r(t2), xd=d.strftime("%Y-%m-%d"), why="T2 reached (rest booked)")
+            break
+        if c < stop:
+            out.update(status="closed", exit=_r(c), xd=d.strftime("%Y-%m-%d"),
+                       why="Breakeven stop after T1" if half else "Closed below the SL")
+            break
+        if p.get("nifty") and nb is not None and nb < p["nifty"]:
+            out.update(status="closed", exit=_r(c), xd=d.strftime("%Y-%m-%d"), why=f"NIFTY closed below {p['nifty']:,.0f}")
+            break
+        if held >= MAX_HOLD:
+            out.update(status="closed", exit=_r(c), xd=d.strftime("%Y-%m-%d"), why=f"Time exit after {MAX_HOLD} sessions")
+            break
+    e = out["entry"]
+    if e:
+        px_ = out["exit"] if out["status"] == "closed" else out["last"]
+        if px_:
+            # blended result: half at T1 when it was reached
+            r = (0.5 * (t1 / e - 1) + 0.5 * (px_ / e - 1)) if out["t1_hit"] else (px_ / e - 1)
+            out["pct"] = _r(r * 100, 1)
+        if out["status"] == "open" and out["t1_hit"]:
+            out["status"] = "t1"
+        out["stop_now"] = _r(stop)
+    return out
+
+
+def track(page, px, benchmark, demo=False, plans_in=None):
+    """Adds Signals and open trades / Watch list / Recent exits to the TAM payload."""
+    plans = plans_in if plans_in is not None else ([] if demo else _load_plans())
+    today = px["Close"].index[-1].strftime("%Y-%m-%d")          # the signal belongs to the latest bar
+    have = {(p["sym"], p["sd"][:10]) for p in plans}
+    active = {p["sym"] for p in plans if p.get("_open")}
+    for r in page["rows"]:
+        if (r["sym"], today) in have or r["sym"] in active or not r.get("sl") or not r.get("t1"):
+            continue
+        plans.append({"sym": r["sym"], "name": r["name"], "sector": r["sector"], "sd": today, "scans": r["scans"],
+                      "strict": r.get("strict", False), "zone": r["zone"], "sl": r["sl"], "t1": r["t1"], "t2": r["t2"],
+                      "rr": r["rr"], "cmp": r["cmp"], "nifty": (page.get("index") or {}).get("cancel")})
+    O, H, L, C = (px[f] for f in ("Open", "High", "Low", "Close"))
+    bench = px["Close"][benchmark] if benchmark in px["Close"].columns else None
+    res = [_replay(p, O, H, L, C, bench) for p in plans]
+    for p, r in zip(plans, res):
+        p["_open"] = r["status"] in ("waiting", "open", "t1")
+    # keep 60 days of plans
+    cut = (datetime.now(IST) - timedelta(days=60)).strftime("%Y-%m-%d")
+    keep = [(p, r) for p, r in zip(plans, res) if p["sd"] >= cut or p["_open"]]
+    plans, res = [k[0] for k in keep], [k[1] for k in keep]
+    if not demo:
+        try:
+            PLANS.parent.mkdir(parents=True, exist_ok=True)
+            PLANS.write_text(json.dumps(plans), encoding="utf-8")
+            from .config import DOCS
+            (DOCS / "tam_plans.json").write_text(json.dumps(plans), encoding="utf-8")
+        except Exception:
+            pass
+    live = sorted([r for r in res if r["status"] in ("waiting", "open", "t1")], key=lambda x: x["sd"], reverse=True)
+    exits = sorted([r for r in res if r["status"] in ("closed", "cancelled", "expired")], key=lambda x: x["xd"] or "", reverse=True)
+    closed = [r for r in exits if r["status"] == "closed" and r["pct"] is not None]
+    stats = {"n": len(closed), "win": _r(np.mean([r["pct"] > 0 for r in closed]) * 100, 0) if closed else None,
+             "avg": _r(np.mean([r["pct"] for r in closed]), 1) if closed else None,
+             "t1": sum(1 for r in closed if r["t1_hit"]), "cancelled": sum(1 for r in exits if r["status"] != "closed")}
+    # watch list: matched a scanner but missed only on risk-reward, volume or freshness
+    soft = ("Risk-reward", "Volume only", "Repeated", "No clear T1")
+    watch = [x for x in page["leave"] if x.get("scans") and all(w.startswith(soft) for w in x["why"])]
+    page["_plans"] = plans
+    page["trk"] = {"live": live, "exits": exits[:60], "stats": stats, "watch": watch[:40]}
+    return page

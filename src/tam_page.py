@@ -27,6 +27,9 @@ TEMPLATE = r"""
 .none{color:var(--muted);font-size:.86rem;margin:0 0 6px}
 td.l2{text-align:left;white-space:normal}
 td.name{text-align:left}
+.tb{font:600 .85rem var(--font);border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:6px 14px;cursor:pointer}
+.tb[aria-selected="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.stt{display:inline-block;font-size:.72rem;font-weight:700;color:#fff;border-radius:6px;padding:0 6px;white-space:nowrap}
 .card{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:0 0 10px}
 .card .t{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
 .card .g{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 12px;font-size:.84rem;margin:8px 0}
@@ -43,6 +46,15 @@ td.name{text-align:left}
 <p class="stamp" id="gen"></p>
 <section class="panel" id="idx"></section>
 <section class="panel" id="act"></section>
+<section class="panel">
+  <div class="tabs" role="tablist" style="display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px">
+    <button role="tab" class="tb" data-v="live" aria-selected="true">Signals and open trades</button>
+    <button role="tab" class="tb" data-v="watch" aria-selected="false">Watch list</button>
+    <button role="tab" class="tb" data-v="exits" aria-selected="false">Recent exits</button>
+  </div>
+  <p class="sub" id="trkhint"></p>
+  <div id="trk"></div>
+</section>
 <section class="panel">
   <div class="tools">
     <label class="tog">Capital ₹ <input type="number" id="cap" min="0" step="10000" placeholder="100000"></label>
@@ -108,7 +120,47 @@ function draw(){
     return `<h3>Scanner ${k}: ${esc(n)} <span class="mut" style="font-weight:400">(${rs.length})</span></h3>` + (rs.length ? list(rs) : '<p class="none">None.</p>'); }).join("");
   document.getElementById("leave").innerHTML = `<thead><tr><th class="l">Stock</th><th>CMP</th><th>Today</th><th class="l">Why it is left out</th></tr></thead><tbody>${D.leave.filter(keep).map(x=>`<tr><td class="name"><button class="psym" data-p="${esc(x.sym)}">${esc(x.sym)}</button><small>${esc(x.sector||"")}</small></td><td>₹${fmt(x.cmp)}</td><td>${pc(x.chg)}</td><td class="l2">${x.why.map(esc).join("; ")}${x.scans?` <span class="mut">(matched scanner ${x.scans.join(", ")})</span>`:""}</td></tr>`).join("") || '<tr><td colspan="4" class="mut">Nothing.</td></tr>'}</tbody>`;
   act();
+  trk();
 }
+let tv = "live";
+const ST = {waiting:["Waiting for entry","var(--warn)"], open:["Open","var(--focus)"], t1:["T1 booked, rest running","var(--up)"],
+            closed:["Closed","var(--muted)"], cancelled:["Cancelled","var(--down)"], expired:["Expired","var(--muted)"]};
+const stt = s => `<span class="stt" style="background:${(ST[s]||["",""])[1]}">${(ST[s]||[s])[0]}</span>`;
+const dd = d => d ? new Date(d.slice(0,10)+"T00:00:00").toLocaleDateString("en-IN",{day:"2-digit",month:"short"}) : "–";
+function trk(){
+  const T = D.trk || {live:[],exits:[],watch:[],stats:{}}, el = document.getElementById("trk"), hint = document.getElementById("trkhint");
+  document.querySelectorAll(".tb").forEach(b=>b.setAttribute("aria-selected", b.dataset.v===tv));
+  const keep = r => !u1kEl.checked || (r.cmp||r.last||0) < 1000;
+  if (tv==="live"){
+    const rs = T.live.filter(keep);
+    hint.innerHTML = `Every name the scanners list is tracked as a plan: a limit order in the safe entry zone for ${5} sessions, SL on a closing basis, 50% booked at T1 with the stop moved to the entry price, the rest out at T2, a close below the stop, NIFTY below its cancel level, or after 15 sessions.`;
+    el.innerHTML = rs.length ? `<div class="tbl"><table><thead><tr><th class="l">Stock</th><th>Signal</th><th>Status</th><th>Entry zone</th><th>Filled</th><th>SL / stop now</th><th>T1</th><th>T2</th><th>Price</th><th>Result</th><th>Qty · MTF 5/10d</th></tr></thead><tbody>${rs.map(r=>`<tr>
+      <td class="name"><button class="psym" data-p="${esc(r.sym)}">${esc(r.sym)}</button>${r.strict?'<span class="st">strict</span>':""}<small>${esc(r.sector||"")} · scanner ${r.scans.join(", ")}</small></td>
+      <td>${dd(r.sd)}</td><td>${stt(r.status)}</td><td>₹${fmt(r.zone[0])} – ₹${fmt(r.zone[1])}</td>
+      <td>${r.entry?`₹${fmt(r.entry)}<small class="mut" style="display:block">${dd(r.ed)}</small>`:"–"}</td>
+      <td>₹${fmt(r.sl)}${r.stop_now && r.stop_now!==r.sl?`<small class="mut" style="display:block">now ₹${fmt(r.stop_now)}</small>`:""}</td>
+      <td>₹${fmt(r.t1)}${r.t1_hit?'<small class="ok" style="display:block">hit '+dd(r.t1_hit)+'</small>':""}</td><td>₹${fmt(r.t2)}</td>
+      <td>₹${fmt(r.last)}</td><td>${r.pct!=null?pc(r.pct):"–"}</td><td>${qty({entry:r.entry||r.zone[1]})} <small class="mut" style="display:block">${mtf({entry:r.entry||r.zone[1]})}</small></td></tr>`).join("")}</tbody></table></div>`
+      : '<p class="none">No signals or open trades right now.</p>';
+  } else if (tv==="watch"){
+    const rs = T.watch.filter(keep);
+    hint.innerHTML = "Names that matched a scanner but missed on risk-reward, volume or freshness. They join the signals if the missing piece appears.";
+    el.innerHTML = rs.length ? `<div class="tbl"><table><thead><tr><th class="l">Stock</th><th>Price</th><th>Today</th><th class="l">Scanner</th><th>Entry zone</th><th>SL</th><th>T1</th><th>R:R</th><th class="l">What is missing</th></tr></thead><tbody>${rs.map(x=>`<tr>
+      <td class="name"><button class="psym" data-p="${esc(x.sym)}">${esc(x.sym)}</button><small>${esc(x.sector||"")}</small></td><td>₹${fmt(x.cmp)}</td><td>${pc(x.chg)}</td>
+      <td class="l2">${(x.scans||[]).map(s=>`<span class="scn">${s} ${esc(D.scan_names[s])}</span>`).join("")}</td>
+      <td>${x.zone?`₹${fmt(x.zone[0])} – ₹${fmt(x.zone[1])}`:"–"}</td><td>${x.sl?`₹${fmt(x.sl)}`:"–"}</td><td>${x.t1?`₹${fmt(x.t1)}`:"–"}</td><td>${x.rr!=null?"1:"+fmt(x.rr,1):"–"}</td>
+      <td class="l2">${x.why.map(esc).join("; ")}</td></tr>`).join("")}</tbody></table></div>` : '<p class="none">Nothing close right now.</p>';
+  } else {
+    const S = T.stats || {};
+    hint.innerHTML = S.n ? `${S.n} closed trades: ${fmt(S.win,0)}% made money, average ${pc(S.avg)} (half booked at T1 when reached), ${S.t1} reached T1. ${S.cancelled} plans were cancelled or expired before entry.` : "Closed, cancelled and expired plans from the last 60 days.";
+    const rs = T.exits.filter(keep);
+    el.innerHTML = rs.length ? `<div class="tbl"><table><thead><tr><th class="l">Stock</th><th>Signal</th><th>Status</th><th>Entry</th><th>Exit</th><th>Result</th><th class="l">Reason</th></tr></thead><tbody>${rs.map(r=>`<tr>
+      <td class="name"><button class="psym" data-p="${esc(r.sym)}">${esc(r.sym)}</button><small>scanner ${r.scans.join(", ")}</small></td><td>${dd(r.sd)}</td><td>${stt(r.status)}</td>
+      <td>${r.entry?`₹${fmt(r.entry)} <small class="mut">${dd(r.ed)}</small>`:"–"}</td><td>${r.exit?`₹${fmt(r.exit)} <small class="mut">${dd(r.xd)}</small>`:dd(r.xd)}</td>
+      <td>${r.pct!=null?pc(r.pct):"–"}</td><td class="l2">${esc(r.why||"")}${r.t1_hit?` · T1 booked ${dd(r.t1_hit)}`:""}</td></tr>`).join("")}</tbody></table></div>` : '<p class="none">No exits yet.</p>';
+  }
+}
+document.querySelectorAll(".tb").forEach(b=>b.onclick=()=>{ tv=b.dataset.v; trk(); });
 capEl.oninput = () => { store.set("azh:tamcap", capEl.value); draw(); };
 u1kEl.onchange = () => { store.set("azh:tamu1k", u1kEl.checked ? "1" : "0"); draw(); };
 draw();
