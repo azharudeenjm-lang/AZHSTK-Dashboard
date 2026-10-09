@@ -268,6 +268,13 @@ def main():
             wk = backtest.download_weekly(universe["ticker"].tolist(), BENCHMARK)
         backtest_page.render(clean(backtest.run(wk, universe, BENCHMARK)))
     backtest_page.publish()
+    try:
+        from src.nse_api import DIAG
+        DIAG["_run"] = {"at": datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M IST"),
+                        "mode": "intraday" if a.intraday else "full", "seconds": round(time.time() - t0)}
+        (DOCS / "diag.json").write_text(json.dumps(DIAG, indent=1), encoding="utf-8")
+    except Exception:
+        pass
     print(f"done in {time.time() - t0:.0f}s -> {out}")
 
 
