@@ -13,6 +13,8 @@ from . import elliott, lines, patterns
 from . import news as _news
 from . import ownership as _own
 from . import buy as _buy
+from . import trend3 as _t3
+from .themes_list import META as _TH_META
 
 # id, group, label, kind ("s" state / "e" event)
 META = [
@@ -101,6 +103,8 @@ META += [(i, "Elliott waves", l, k) for i, l, k in elliott.META]
 META += [(i, "News triggers", l, k) for i, l, k in _news.META]
 META += [(i, "Ownership and alerts", l, k) for i, l, k in _own.META]
 META += [(i, "Buy criteria (weekly)", l, k) for i, l, k in _buy.META]
+META += [(i, "Trend lines", l, k) for i, l, k in _t3.META]
+META += [(i, "Themes", l, k) for i, l, k in _TH_META]
 
 LVMAP = {"Breakout": "lv_brk", "Trendline breakout": "lv_tlb", "Retest": "lv_ret",
          "At trendline support": "lv_tls", "Near support": "lv_sup", "Near resistance": "lv_res",

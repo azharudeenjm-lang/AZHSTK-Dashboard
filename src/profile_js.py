@@ -537,6 +537,7 @@ function render(){
   ${earnWarn(p)}${tradeBox(s, p)}
   ${setupStrip(p.su)}
   ${buyStrip(p)}
+  ${(p.th||[]).length ? `<p style="font-size:.85rem;margin:0 0 10px"><span class="pf-mut">Themes:</span> ${p.th.map(t=>`<a href="themes.html#${esc(t.id)}" class="pchip o" style="--c:${({Leading:"#1E8F5A",Improving:"#2F62C8",Weakening:"#C9780F",Lagging:"#C2453B"})[t.state]||"#5B6472"};text-decoration:none;margin-right:4px">${esc(t.name)}${t.state?" · "+t.state:""}</a>`).join("")}</p>` : ""}
   ${fundBlock(p)}
   ${newsBlock(p)}
   ${tf==="m" ? renderMonthly(p, s) : `  ${tf==="w" && IDX && IDX.partial ? `<p class="pf-mut" style="font-size:.8rem;margin:0 0 10px">This week is still forming (prices up to ${dl(IDX.asof)}), so the weekly zone can change until Friday's close.</p>` : ""}
@@ -805,6 +806,13 @@ mountRegime();
   if (getComputedStyle(nav).display) a.style.cssText = nav.querySelector("a") ? nav.querySelector("a").style.cssText : "";
   const after = nav.querySelector('a[href="setups.html"]') || nav.lastElementChild;
   after ? after.insertAdjacentElement("afterend", a) : nav.appendChild(a);
+})();
+(function addThemesLink(){
+  setTimeout(()=>{ const nav = document.querySelector("header nav"); if (!nav || nav.querySelector('a[href="themes.html"]')) return;
+    const a = document.createElement("a"); a.href = "themes.html"; a.textContent = "Themes";
+    if (nav.querySelector("a")) a.style.cssText = nav.querySelector("a").style.cssText;
+    const after = nav.querySelector('a[href="zones.html"]') || nav.lastElementChild;
+    after ? after.insertAdjacentElement("afterend", a) : nav.appendChild(a); }, 0);
 })();
 (function addTamLink(){
   setTimeout(()=>{ const nav = document.querySelector("header nav"); if (!nav || nav.querySelector('a[href="tam.html"]')) return;

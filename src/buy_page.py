@@ -62,6 +62,8 @@ TEMPLATE = r"""
     <button role="tab" data-v="open" aria-selected="true">Signals and open trades</button>
     <button role="tab" data-v="watch" aria-selected="false">Watch list</button>
     <button role="tab" data-v="exits" aria-selected="false">Recent exits</button>
+    <button role="tab" data-v="t3" aria-selected="false">3-touch trendline breakouts</button>
+    <button role="tab" data-v="t3n" aria-selected="false">Near a 3-touch trendline</button>
   </div>
   <div class="tools">
     <label class="tog">Risk per trade ₹ <input type="number" id="risk" min="0" step="500" placeholder="e.g. 5000"></label>
@@ -116,6 +118,22 @@ function draw(){
     hint.innerHTML = "Leaders near their highs, within 5% of the 12-week breakout level. A weekly close above both trigger levels makes it a signal.";
     t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Price</th><th>Breakout level</th><th>Distance</th><th>Weekly close needed (with +8%)</th><th>RS</th><th>From 52-wk high</th><th class="l">Notes</th></tr></thead><tbody>${rows.map(r=>`<tr>
       ${nm(r)}<td>₹${fmt(r.price)}</td><td>₹${fmt(r.trig)}</td><td>${fmt(r.dist,1)}%</td><td><b>₹${fmt(r.need8)}</b></td><td>${r.rs??"–"}</td><td>${pc(r.hi52)}</td><td class="l">${flags(r.flags)}</td></tr>`).join("") || '<tr><td colspan="8" class="mut">Nothing close to triggering.</td></tr>'}</tbody>`;
+  } else if (view==="t3" || view==="t3n"){
+    const T = D.t3 || {brk:[], near:[]};
+    const tl = r => `${r.touches} touches: ${r.tdates.map(d=>dl(d)).join(", ")} · ${r.span} weeks from the top ₹${fmt(r.top)} (${dl(r.top_d)})`;
+    if (view==="t3"){
+      const allr = T.brk.filter(keep), rows = allr.filter(r=>r.alive), gone = allr.length - rows.length;
+      hint.innerHTML = (gone ? `${gone} older breakouts that have since closed below their trailing stop are hidden. ` : "") + "Weekly close above a falling trendline that started at a major top and was touched at least 3 times over 6+ months (like E2E in May 2026). <b>Strong</b> = breakout week up 8%+ and RS in the top 40%: in testing these did about twice as well (47% won, about +12% per trade vs +6.6% for all). Stop-loss = breakout-week low; trailing stop = 10-week average.";
+      t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Breakout week</th><th>Line at breakout</th><th>Close</th><th>Week</th><th>RS</th><th>Stop-loss</th><th>Trailing stop</th><th>Price</th><th>Gain</th><th>Qty</th><th class="l">Trendline</th></tr></thead><tbody>${rows.map(r=>`<tr>
+        ${nm(r)}<td>${dl(r.bd)}${r.forming?'<span class="new form">forming</span>':r.ago===0?'<span class="new">new</span>':""}${r.strong?'<span class="new">strong</span>':""}</td>
+        <td>₹${fmt(r.lvl)}</td><td>₹${fmt(r.entry)}</td><td>${pc(r.wk)}</td><td>${r.rs??"–"}</td><td>₹${fmt(r.sl)}</td><td><b>₹${fmt(r.trail)}</b>${r.alive?"":'<small class="bad" style="display:block">closed below: exit</small>'}</td>
+        <td>₹${fmt(r.price)}</td><td>${pc(r.gain)}</td><td>${qty(r.price, r.trail)}</td><td class="l" style="white-space:normal;min-width:240px;font-size:.8rem">${esc(tl(r))}</td></tr>`).join("") || '<tr><td colspan="12" class="mut">No 3-touch trendline breakouts in the last 26 weeks.</td></tr>'}</tbody>`;
+    } else {
+      const rows = T.near.filter(keep);
+      hint.innerHTML = "Still under a falling trendline touched 3+ times, within 5% of it. A weekly close above the trigger (2% over the line) makes it a breakout; best if that week is up 8%+.";
+      t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Price</th><th>Line now</th><th>Weekly close needed</th><th>Distance</th><th>RS</th><th class="l">Trendline</th></tr></thead><tbody>${rows.map(r=>`<tr>
+        ${nm(r)}<td>₹${fmt(r.price)}</td><td>₹${fmt(r.lvl)}</td><td><b>₹${fmt(r.trig)}</b></td><td>${fmt(r.dist,1)}%</td><td>${r.rs??"–"}</td><td class="l" style="white-space:normal;min-width:240px;font-size:.8rem">${esc(tl(r))}</td></tr>`).join("") || '<tr><td colspan="7" class="mut">Nothing near a 3-touch trendline.</td></tr>'}</tbody>`;
+    }
   } else {
     hint.innerHTML = "Trades closed in the last 8 weeks by the stop-loss or trailing stop.";
     t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Signal week</th><th>Entry</th><th>Exit week</th><th>Exit</th><th>Result</th></tr></thead><tbody>${D.exits.map(r=>`<tr>
