@@ -36,6 +36,7 @@ def main():
     ap.add_argument("--no-news", action="store_true")
     ap.add_argument("--demo", action="store_true", help="synthetic data, no internet needed")
     ap.add_argument("--backtest", action="store_true", help="rerun the weekly zone backtest (slow, weekly)")
+    ap.add_argument("--buy-backtest", action="store_true", help="backtest the Buy criteria from 2020 (downloads ~7 years of daily prices)")
     ap.add_argument("--intraday", action="store_true", help="market-hours refresh: today's prices only, cached history")
     a = ap.parse_args()
     t0 = time.time()
@@ -217,6 +218,23 @@ def main():
             print(f"  ! NSE results skipped: {str(e)[:100]}")
             nse_f = fundm.load_nse()
     fu = fundm.combine(stocks, fund, nse_f, own_facts)
+    # Buy criteria tab: weekly momentum breakouts with stop-loss and trailing stop
+    from src import buy, buy_page
+    try:
+        by_page, by_rec, by_sc, by_frames = buy.build(px, stocks, fu, earn)
+        buy_page.render(clean(by_page))
+        for t, r in by_sc.items():
+            sg["w"].setdefault(t, {}).update(r)
+        print(f"  buy criteria: {len(by_page['open'])} open signals, {len(by_page['watch'])} on watch")
+        from src import forward, forward_page
+        try:
+            fw = forward.update(by_frames, px, stocks, fu, BENCHMARK, today, full_run=not a.intraday, demo=a.demo)
+            forward_page.render(clean(fw))
+        except Exception as e:
+            print(f"  ! forward test skipped: {str(e)[:120]}")
+    except Exception as e:
+        print(f"  ! buy criteria skipped: {str(e)[:120]}")
+        by_rec = {}
     for tf in ("d", "w"):
         sg[tf] = {t: r for t, r in sg[tf].items() if r}
     ser = series.build(px, tick)
@@ -245,7 +263,7 @@ def main():
     profiles.write(clean(stocks), clean(sectors), clean({"d": zd, "w": zw}), clean({"d": hd, "w": hw}),
                    clean({"d": ld, "w": lw}), fmap, {"d": dates_d, "w": dates_w}, gen,
                    {"partial": partial, "asof": asof}, clean(su), clean(mon),
-                   extra={"rs": rs, "earn": earn, "fib": clean(fibs), "sg": sg, "ser": clean(ser), "geo": clean(geo), "ew": clean(ewg), "nw": nws, "fu": clean(fu), "al": own_al})
+                   extra={"rs": rs, "earn": earn, "fib": clean(fibs), "sg": sg, "ser": clean(ser), "geo": clean(geo), "ew": clean(ewg), "nw": nws, "fu": clean(fu), "al": own_al, "by": clean(by_rec)})
     try:
         profiles.write_long(px, tick, {"d": dates_d, "w": dates_w})
     except Exception as e:
@@ -268,6 +286,13 @@ def main():
             wk = backtest.download_weekly(universe["ticker"].tolist(), BENCHMARK)
         backtest_page.render(clean(backtest.run(wk, universe, BENCHMARK)))
     backtest_page.publish()
+    if a.buy_backtest and not a.demo:
+        print("   buy criteria backtest from 2020")
+        try:
+            from src import buy_backtest
+            buy_backtest.run(universe["ticker"].tolist(), BENCHMARK, {s_["sym"]: s_["name"] for s_ in stocks})
+        except Exception as e:
+            print(f"  ! buy criteria backtest failed: {str(e)[:150]}")
     try:
         from src.nse_api import DIAG
         DIAG["_run"] = {"at": datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M IST"),
