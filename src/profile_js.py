@@ -318,6 +318,15 @@ window.openProfile = openProfile;
 
 const BKC = {"Ready":"--pq-lead","Setting up":"--pq-impr","Watchlist":"--pz-os","Avoid":"--pq-lag"};
 const mk = st => st==="OK"||st==="Good" ? ['✓','pf-ok'] : st==="Mixed"||st==="Wait"||st==="Neutral" ? ['~','pf-mid'] : st==="No data" ? ['?','pf-mut'] : ['✗','pf-bad'];
+function buyStrip(p){
+  const b = p.by; if (!b) return "";
+  const fl = (b.flags||[]).map(x=>`<span class="pchip o" style="--c:var(--down,#C2453B);margin-left:4px">${esc(x)}</span>`).join("");
+  if (b.st==="watch") return `<div class="pf-su" style="--c:#6B4BB8"><div class="hd"><b>Buy criteria: watch</b><small>within ${fmt(b.dist,1)}% of the 12-week breakout level ₹${fmt(b.trig,2)}. A weekly close at or above ₹${fmt(b.need8,2)} would trigger the signal.</small></div></div>`;
+  return `<div class="pf-su" style="--c:var(--up,#1E8F5A)"><div class="hd"><b>Buy criteria: ${b.st==="new"?"new signal":"open trade"}${b.forming?" (week still forming)":""}</b>
+    <small>signal week ${dl(b.sd)} at ₹${fmt(b.entry,2)} · now ${b.gain>0?"+":""}${fmt(b.gain,1)}% (best ${fmt(b.best,1)}%)</small>
+    <small style="display:block"><b>Stop-loss ₹${fmt(b.sl,2)}</b> (risk ${fmt(b.risk,1)}%) · <b>Trailing stop ₹${fmt(b.trail,2)}</b> (${esc(b.trail_kind)}) · exit on a weekly close below it${fl}</small></div>
+    <div class="it"><i class="ok">✓</i><div><a href="buy.html" style="color:inherit">See all buy signals</a><small>${fmt(b.room,1)}% above the trailing stop</small></div></div></div>`;
+}
 function setupStrip(su){
   if (!su) return "";
   const it = (st, t, d) => { const [i,c]=mk(st); return `<div class="it"><i class="${c}">${i}</i><div>${esc(t)}<small>${esc(d)}</small></div></div>`; };
@@ -527,6 +536,7 @@ function render(){
 
   ${earnWarn(p)}${tradeBox(s, p)}
   ${setupStrip(p.su)}
+  ${buyStrip(p)}
   ${fundBlock(p)}
   ${newsBlock(p)}
   ${tf==="m" ? renderMonthly(p, s) : `  ${tf==="w" && IDX && IDX.partial ? `<p class="pf-mut" style="font-size:.8rem;margin:0 0 10px">This week is still forming (prices up to ${dl(IDX.asof)}), so the weekly zone can change until Friday's close.</p>` : ""}
@@ -794,6 +804,20 @@ mountRegime();
   const a = document.createElement("a"); a.href = "screener.html"; a.textContent = "Screener";
   if (getComputedStyle(nav).display) a.style.cssText = nav.querySelector("a") ? nav.querySelector("a").style.cssText : "";
   const after = nav.querySelector('a[href="setups.html"]') || nav.lastElementChild;
+  after ? after.insertAdjacentElement("afterend", a) : nav.appendChild(a);
+})();
+(function addForwardLink(){
+  setTimeout(()=>{ const nav = document.querySelector("header nav"); if (!nav || nav.querySelector('a[href="forward.html"]')) return;
+    const a = document.createElement("a"); a.href = "forward.html"; a.textContent = "Forward test";
+    if (nav.querySelector("a")) a.style.cssText = nav.querySelector("a").style.cssText;
+    const after = nav.querySelector('a[href="buy.html"]') || nav.lastElementChild;
+    after ? after.insertAdjacentElement("afterend", a) : nav.appendChild(a); }, 0);
+})();
+(function addBuyLink(){
+  const nav = document.querySelector("header nav"); if (!nav || nav.querySelector('a[href="buy.html"]')) return;
+  const a = document.createElement("a"); a.href = "buy.html"; a.textContent = "Buy criteria";
+  if (nav.querySelector("a")) a.style.cssText = nav.querySelector("a").style.cssText;
+  const after = nav.querySelector('a[href="screener.html"]') || nav.querySelector('a[href="setups.html"]') || nav.lastElementChild;
   after ? after.insertAdjacentElement("afterend", a) : nav.appendChild(a);
 })();
 (function pwa(){

@@ -64,6 +64,8 @@ def write(stocks, sectors, zones, hists, lvls, fund, dates, generated, live=None
         sym_ = t[:-3] if t.endswith(".NS") else t
         if (extra.get("fu") or {}).get(sym_):
             prof["fu"] = extra["fu"][sym_]
+        if (extra.get("by") or {}).get(sym_):
+            prof["by"] = extra["by"][sym_]
         if (extra.get("al") or {}).get(sym_):
             prof["al"] = [{k: v for k, v in x.items() if k != "e"} for x in extra["al"][sym_]]
         nw = (extra.get("nw") or {}).get(t[:-3] if t.endswith(".NS") else t)

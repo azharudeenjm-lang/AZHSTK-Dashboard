@@ -12,6 +12,7 @@ from .config import SCREENER_EVENT_BARS as NB, WEEKLY_LIVE
 from . import elliott, lines, patterns
 from . import news as _news
 from . import ownership as _own
+from . import buy as _buy
 
 # id, group, label, kind ("s" state / "e" event)
 META = [
@@ -99,6 +100,7 @@ META += [(i, "Chart patterns", l, k) for i, l, k in patterns.PAT_META]
 META += [(i, "Elliott waves", l, k) for i, l, k in elliott.META]
 META += [(i, "News triggers", l, k) for i, l, k in _news.META]
 META += [(i, "Ownership and alerts", l, k) for i, l, k in _own.META]
+META += [(i, "Buy criteria (weekly)", l, k) for i, l, k in _buy.META]
 
 LVMAP = {"Breakout": "lv_brk", "Trendline breakout": "lv_tlb", "Retest": "lv_ret",
          "At trendline support": "lv_tls", "Near support": "lv_sup", "Near resistance": "lv_res",
