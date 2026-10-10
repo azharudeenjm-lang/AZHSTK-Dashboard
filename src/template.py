@@ -133,9 +133,10 @@ def build(px, stocks):
                     if CNT[i, j] < need:
                         armed = True
                     elif armed:
-                        inside = {"i": i, "e": c_, "sl": c_ * (1 - STOP)}
+                        inside = {"i": i, "e": c_, "sl": c_ * (1 - STOP), "mx": c_}
                     continue
                 xp, why = None, None
+                inside["mx"] = max(inside["mx"], c_)
                 if np.isfinite(Ln[i, j]) and Ln[i, j] <= inside["sl"]:
                     o = On[i, j]
                     xp, why = (min(o, inside["sl"]) if np.isfinite(o) else inside["sl"]), "Stop-loss"
@@ -143,7 +144,8 @@ def build(px, stocks):
                     xp, why = c_, "Weekly close below 50-day MA"
                 if xp is not None:
                     tr = {"ed": T[inside["i"]].strftime("%Y-%m-%d"), "ep": round(float(inside["e"]), 2), "sl": round(float(inside["sl"]), 2),
-                          "xd": T[i].strftime("%Y-%m-%d"), "xp": round(float(xp), 2), "g": round((xp / inside["e"] - 1) * 100, 1), "why": why}
+                          "xd": T[i].strftime("%Y-%m-%d"), "xp": round(float(xp), 2), "g": round((xp / inside["e"] - 1) * 100, 1), "why": why,
+                          "mx": round((inside["mx"] / inside["e"] - 1) * 100, 1)}
                     if T[inside["i"]] >= since:
                         done.append((tr["g"], why))
                     last_tr[rule][t[:-3]] = tr
@@ -151,7 +153,8 @@ def build(px, stocks):
             if inside is not None:
                 c_ = Cn[-1, j]
                 last_tr[rule][t[:-3]] = {"ed": T[inside["i"]].strftime("%Y-%m-%d"), "ep": round(float(inside["e"]), 2), "sl": round(float(inside["sl"]), 2),
-                                         "xd": None, "xp": None, "g": round((c_ / inside["e"] - 1) * 100, 1), "open": True}
+                                         "xd": None, "xp": None, "g": round((c_ / inside["e"] - 1) * 100, 1), "open": True,
+                                         "mx": round((max(inside["mx"], c_) / inside["e"] - 1) * 100, 1)}
         g = np.array([x[0] for x in done]) if done else np.array([0.0])
         og = [float(v["g"]) for v in last_tr[rule].values() if v.get("open") and v["ed"] >= since.strftime("%Y-%m-%d")]
         n_open = len(og)

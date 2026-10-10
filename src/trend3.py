@@ -135,6 +135,7 @@ def build(px, stocks, rs_frame=None, today=None):
                    "tdates": touch_dates, "span": int(r["span"]), "wk": round(float(wk) * 100, 1) if np.isfinite(wk) else None,
                    "rs": round(rsv * 100) if rsv is not None else None, "strong": strong, "sl": round(float(sl), 2),
                    "trail": round(float(trail), 2), "price": round(float(cc[-1]), 2), "gain": round((cc[-1] / cc[b] - 1) * 100, 1),
+                   "mx": round(float((np.nanmax(cc[b:]) / cc[b] - 1) * 100), 1),
                    "alive": bool(alive), "forming": bool(forming and ago == 0),
                    "top": round(float(hh[A]), 2), "top_d": ds[f0 + A]}
             brks.append(row)
@@ -157,7 +158,7 @@ def build(px, stocks, rs_frame=None, today=None):
     for r in brks:
         x = exits.get((r["sym"], r["bd"]))
         if x:
-            r["xd"], r["xp"], r["xg"], r["why"] = x
+            r["xd"], r["xp"], r["xg"], r["why"], r["mx"] = x
     brks.sort(key=lambda x: (x["ago"], not x["strong"], -(x["rs"] or 0)))
     near.sort(key=lambda x: x["dist"])
     return {"brk": brks, "near": near[:80], "forming": forming, "stats": stats}, sc, geo
@@ -201,7 +202,8 @@ def _history(c, h, l, sma10, rs_frame, cols, ds, weeks=104):
             busy_until = ex if ex is not None else n
             if ex is not None:
                 g = (cc[ex] / cc[i] - 1) * 100
-                exits[(t[:-3], ds[i])] = (ds[ex], round(float(cc[ex]), 2), round(float(g), 1), why)
+                exits[(t[:-3], ds[i])] = (ds[ex], round(float(cc[ex]), 2), round(float(g), 1), why,
+                                         round(float((np.nanmax(cc[i:ex + 1]) / cc[i] - 1) * 100), 1))
                 res["all"].append((g, why))
                 if strong:
                     res["strong"].append((g, why))

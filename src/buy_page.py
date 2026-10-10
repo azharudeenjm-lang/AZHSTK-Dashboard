@@ -71,6 +71,8 @@ TEMPLATE = r"""
     <label class="tog">Risk per trade ₹ <input type="number" id="risk" min="0" step="500" placeholder="e.g. 5000"></label>
     <label class="tog"><input type="checkbox" id="clean" checked> Hide stocks under surveillance</label>
     <label class="tog"><input type="checkbox" id="qab"> Quality A or B only</label>
+    <label class="tog">Sort by <select id="sortk" style="font:inherit;padding:4px 6px;border-radius:8px;border:1px solid var(--line,#ccc);background:var(--panel,#fff);color:inherit"></select></label>
+    <button type="button" id="sortd" class="tog" title="Reverse the order" style="font:inherit;cursor:pointer;padding:4px 10px;border-radius:8px;border:1px solid var(--line,#ccc);background:var(--panel,#fff);color:inherit"></button>
   </div>
   <div class="sub" id="hint" style="margin:0 0 12px"></div>
   <div class="tbl"><table id="t"></table></div>
@@ -110,12 +112,54 @@ const statBox = (S, title) => !S || !S.n ? "" : `<div class="kpi" style="margin:
   <div><b class="${(S.avg||0)>=0?'ok':'bad'}">${S.avg!=null?(S.avg>0?"+":"")+fmt(S.avg,1)+"%":"–"}</b><small>average per closed trade</small></div>${S.avg_all!=null?`<div><b class="${S.avg_all>=0?'ok':'bad'}">${(S.avg_all>0?"+":"")+fmt(S.avg_all,1)}%</b><small>average incl. open trades at today's price (${S.win_all}% in profit)</small></div>`:""}</div>`;
 const stopOf = r => r.tr && r.tr.open && r.tr.sl ? r.tr.sl : r.price*0.92;
 const trCells = r => { const x = r.tr; if (!x) return '<td>–</td><td>–</td><td>–</td>';
-  return `<td>₹${fmt(x.ep)}<small class="mut" style="display:block">${dl(x.ed)}</small></td><td>${x.open ? `₹${fmt(r.price)}<small class="mut" style="display:block">now</small>` : `₹${fmt(x.xp)}<small class="bad" style="display:block">exited ${dl(x.xd)}${x.why?" · "+esc(x.why):""}</small>`}</td><td>${pc(x.g)}</td>`; };
+  return `<td>₹${fmt(x.ep)}<small class="mut" style="display:block">${dl(x.ed)}</small></td><td>${x.open ? `₹${fmt(r.price)}<small class="mut" style="display:block">now</small>` : `₹${fmt(x.xp)}<small class="bad" style="display:block">exited ${dl(x.xd)}${x.why?" · "+esc(x.why):""}</small>`}</td><td>${pc(x.g)}${x.mx!=null?`<small class="mut" style="display:block">max ${x.mx>0?"+":""}${fmt(x.mx,1)}%</small>`:""}</td>`; };
+// ---------- sorting: [label, value of a row, default direction (1 = small first, -1 = big/newest first)] ----------
+const NAME = ["Name (A–Z)", r=>r.sym, 1], RS = ["Relative strength (RS)", r=>r.rs, -1];
+const TT = since => [["Default (leaders first)", null, 1], ["Entry date", r=>r.tr&&r.tr.ed, -1], RS, ["Gain", r=>r.tr&&r.tr.g, -1], ["Max gain since entry", r=>r.tr&&r.tr.mx, -1],
+  ["Exit date", r=>r.tr&&r.tr.xd, -1], ["Nearest 52-week high", r=>r.hi, -1], ["Above 52-week low", r=>r.lo, -1], ["Room above the 50-day MA", r=>r.room, 1],
+  ...(since ? [["Passing all 8 since", r=>r.since, -1]] : []), ["Price", r=>r.price, -1], NAME];
+const SORTS = {
+  open: [["Default", null, 1], ["Signal date", r=>r.sd, -1], RS, ["Gain now", r=>r.gain, -1], ["Max gain since entry", r=>r.best, -1], ["Risk %", r=>r.risk, 1],
+         ["Room to the trailing stop", r=>r.room, 1], ["Breakout week gain", r=>r.wkg, -1], ["Quality grade", r=>r.grade, 1], NAME],
+  watch: [["Default", null, 1], ["Distance to trigger", r=>r.dist, 1], RS, ["Nearest 52-week high", r=>r.hi52, -1], NAME],
+  exits: [["Default", null, 1], ["Exit date", r=>r.xd, -1], ["Signal date", r=>r.sd, -1], ["Result", r=>r.r, -1], NAME],
+  tt: TT(true), tt7: TT(false),
+  t3: [["Default (newest first)", null, 1], ["Breakout date", r=>r.bd, -1], RS, ["Gain", r=>r.xd ? r.xg : r.gain, -1], ["Max gain since breakout", r=>r.mx, -1],
+       ["Breakout week gain", r=>r.wk, -1], ["Touches", r=>r.touches, -1], ["Trendline length (weeks)", r=>r.span, -1], ["Strong first", r=>r.strong?1:0, -1], NAME],
+  t3n: [["Default", null, 1], ["Distance to trigger", r=>r.dist, 1], RS, ["Touches", r=>r.touches, -1], ["Trendline length (weeks)", r=>r.span, -1], NAME],
+};
+const sortK = document.getElementById("sortk"), sortD = document.getElementById("sortd");
+let sortView = null, sortDir = 1;
+function sortUI(){
+  if (sortView === view) return;
+  sortView = view;
+  const L = SORTS[view] || [];
+  sortK.innerHTML = L.map((o,i)=>`<option value="${i}">${esc(o[0])}</option>`).join("");
+  const saved = (store.get("azh:sort:"+view) || "").split(",");
+  sortK.value = L[+saved[0]] ? saved[0] : "0";
+  sortDir = saved[1] ? +saved[1] : (L[+sortK.value]||[0,0,1])[2];
+  sortD.textContent = sortDir < 0 ? "↓ high to low" : "↑ low to high";
+}
+function srt(rows){
+  sortUI();
+  const o = (SORTS[view]||[])[+sortK.value];
+  sortD.style.visibility = o && o[1] ? "visible" : "hidden";
+  if (!o || !o[1]) return rows;
+  const f = o[1];
+  return rows.map((r,i)=>[f(r), i, r]).sort((a,b)=>{
+    const x = a[0], y = b[0], nx = x==null || x==="" || (typeof x==="number" && !isFinite(x)), ny = y==null || y==="" || (typeof y==="number" && !isFinite(y));
+    if (nx || ny) return nx && ny ? a[1]-b[1] : nx ? 1 : -1;          // blanks always last
+    const c = typeof x==="string" ? x.localeCompare(y) : x - y;
+    return c ? c * sortDir : a[1]-b[1];
+  }).map(z=>z[2]);
+}
+sortK.onchange = () => { sortDir = ((SORTS[view]||[])[+sortK.value]||[0,0,1])[2]; store.set("azh:sort:"+view, sortK.value+","+sortDir); sortView = null; draw(); };
+sortD.onclick = () => { sortDir = -sortDir; store.set("azh:sort:"+view, sortK.value+","+sortDir); sortView = null; draw(); };
 function draw(){
   document.querySelectorAll(".tabs button").forEach(b=>b.setAttribute("aria-selected", b.dataset.v===view));
   const t = document.getElementById("t"), hint = document.getElementById("hint");
   if (view==="open"){
-    const rows = D.open.filter(keep);
+    const rows = srt(D.open.filter(keep));
     hint.innerHTML = `${rows.filter(r=>r.ago<=1).length} new signal(s) in the last two weeks, ${rows.length} open trade(s) in all. Enter at about the signal price; the quantity uses your risk per trade and the stop-loss.`;
     t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Signal week</th><th>Entry</th><th>Stop-loss</th><th>Risk</th><th>Trailing stop now</th><th>Price</th><th>Gain</th><th>Room to trail</th><th>Qty</th><th class="l">Notes</th></tr></thead><tbody>${rows.map(r=>`<tr>
       ${nm(r)}<td>${dl(r.sd)}${r.forming?'<span class="new form">forming</span>':r.ago===0?'<span class="new">new</span>':r.ago===1?'<span class="new">last week</span>':""}</td>
@@ -124,12 +168,12 @@ function draw(){
       <td>₹${fmt(r.price)}</td><td>${pc(r.gain)}<small class="mut" style="display:block">best ${pc(r.best)}</small></td>
       <td>${pc(r.room)}</td><td>${qty(r.price, r.trail)}</td><td class="l">RS ${r.rs??"–"} · week +${fmt(r.wkg,1)}% · grade ${esc(r.grade||"–")} ${flags(r.flags)}</td></tr>`).join("") || '<tr><td colspan="11" class="mut">No open signals right now.</td></tr>'}</tbody>`;
   } else if (view==="watch"){
-    const rows = D.watch.filter(keep);
+    const rows = srt(D.watch.filter(keep));
     hint.innerHTML = "Leaders near their highs, within 5% of the 12-week breakout level. A weekly close above both trigger levels makes it a signal.";
     t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Price</th><th>Breakout level</th><th>Distance</th><th>Weekly close needed (with +8%)</th><th>RS</th><th>From 52-wk high</th><th class="l">Notes</th></tr></thead><tbody>${rows.map(r=>`<tr>
       ${nm(r)}<td>₹${fmt(r.price)}</td><td>₹${fmt(r.trig)}</td><td>${fmt(r.dist,1)}%</td><td><b>₹${fmt(r.need8)}</b></td><td>${r.rs??"–"}</td><td>${pc(r.hi52)}</td><td class="l">${flags(r.flags)}</td></tr>`).join("") || '<tr><td colspan="8" class="mut">Nothing close to triggering.</td></tr>'}</tbody>`;
   } else if (view==="tt" || view==="tt7"){
-    const T = D.tt || {all:[], near:[]}, rows = (view==="tt" ? T.all : T.near).filter(keep);
+    const T = D.tt || {all:[], near:[]}, rows = srt((view==="tt" ? T.all : T.near).filter(keep));
     hint.innerHTML = view==="tt" ? `Minervini's Stage 2 filter: price above the 50, 150 and 200-day MAs in that order, the 200-day rising, 30%+ above the 52-week low, within 25% of the high, RS 70+. ${rows.length} stocks pass. <b>Leader</b> = RS 90+ and within 5% of the 52-week high: in testing these did about twice as well as all passes (48% won, about +15% per trade vs +7%).`
       : "Stocks passing 7 of the 8 checks, with the one that is missing.";
     hint.innerHTML = statBox((T.stats||{})[view==="tt"?"8":"7"], view==="tt" ? "Trend Template 8/8" : "Trend Template 7/8") + hint.innerHTML +
@@ -142,21 +186,21 @@ function draw(){
     const T = D.t3 || {brk:[], near:[]};
     const tl = r => `${r.touches} touches: ${r.tdates.map(d=>dl(d)).join(", ")} · ${r.span} weeks from the top ₹${fmt(r.top)} (${dl(r.top_d)})`;
     if (view==="t3"){
-      const allr = T.brk.filter(keep), rows = allr.filter(r=>r.alive || r.xd), gone = allr.length - rows.length;
+      const allr = T.brk.filter(keep), rows = srt(allr.filter(r=>r.alive || r.xd)), gone = allr.length - rows.length;
       hint.innerHTML = statBox((T.stats||{}).all, "All 3-touch breakouts") + statBox((T.stats||{}).strong, "Strong ones only") + (gone ? `${gone} breakouts are hidden. ` : "") + "Weekly close above a falling trendline that started at a major top and was touched at least 3 times over 6+ months (like E2E in May 2026). <b>Strong</b> = breakout week up 8%+ and RS in the top 40%: in testing these did about twice as well (47% won, about +12% per trade vs +6.6% for all). Stop-loss = breakout-week low; trailing stop = 10-week average.";
       t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Breakout week</th><th>Line at breakout</th><th>Entry (close)</th><th>Week</th><th>RS</th><th>Stop-loss</th><th>Trailing stop</th><th>Now / exit</th><th>Gain</th><th>Qty</th><th class="l">Trendline</th></tr></thead><tbody>${rows.map(r=>`<tr>
         ${nm(r)}<td>${dl(r.bd)}${r.forming?'<span class="new form">forming</span>':r.ago===0?'<span class="new">new</span>':""}${r.strong?'<span class="new">strong</span>':""}</td>
         <td>₹${fmt(r.lvl)}</td><td>₹${fmt(r.entry)}</td><td>${pc(r.wk)}</td><td>${r.rs??"–"}</td><td>₹${fmt(r.sl)}</td><td><b>₹${fmt(r.trail)}</b>${r.alive?"":'<small class="bad" style="display:block">closed below: exit</small>'}</td>
-        <td>${r.xd ? `₹${fmt(r.xp)}<small class="bad" style="display:block">exited ${dl(r.xd)} (${esc(r.why||"")})</small>` : `₹${fmt(r.price)}<small class="mut" style="display:block">now</small>`}</td><td>${pc(r.xd ? r.xg : r.gain)}</td><td>${r.xd ? "–" : qty(r.price, r.trail)}</td><td class="l" style="white-space:normal;min-width:240px;font-size:.8rem">${esc(tl(r))}</td></tr>`).join("") || '<tr><td colspan="12" class="mut">No 3-touch trendline breakouts in the last 26 weeks.</td></tr>'}</tbody>`;
+        <td>${r.xd ? `₹${fmt(r.xp)}<small class="bad" style="display:block">exited ${dl(r.xd)} (${esc(r.why||"")})</small>` : `₹${fmt(r.price)}<small class="mut" style="display:block">now</small>`}</td><td>${pc(r.xd ? r.xg : r.gain)}${r.mx!=null?`<small class="mut" style="display:block">max ${r.mx>0?"+":""}${fmt(r.mx,1)}%</small>`:""}</td><td>${r.xd ? "–" : qty(r.price, r.trail)}</td><td class="l" style="white-space:normal;min-width:240px;font-size:.8rem">${esc(tl(r))}</td></tr>`).join("") || '<tr><td colspan="12" class="mut">No 3-touch trendline breakouts in the last 26 weeks.</td></tr>'}</tbody>`;
     } else {
-      const rows = T.near.filter(keep);
+      const rows = srt(T.near.filter(keep));
       hint.innerHTML = "Still under a falling trendline touched 3+ times, within 5% of it. A weekly close above the trigger (2% over the line) makes it a breakout; best if that week is up 8%+.";
       t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Price</th><th>Line now</th><th>Weekly close needed</th><th>Distance</th><th>RS</th><th class="l">Trendline</th></tr></thead><tbody>${rows.map(r=>`<tr>
         ${nm(r)}<td>₹${fmt(r.price)}</td><td>₹${fmt(r.lvl)}</td><td><b>₹${fmt(r.trig)}</b></td><td>${fmt(r.dist,1)}%</td><td>${r.rs??"–"}</td><td class="l" style="white-space:normal;min-width:240px;font-size:.8rem">${esc(tl(r))}</td></tr>`).join("") || '<tr><td colspan="7" class="mut">Nothing near a 3-touch trendline.</td></tr>'}</tbody>`;
     }
   } else {
     hint.innerHTML = "Trades closed in the last 8 weeks by the stop-loss or trailing stop.";
-    t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Signal week</th><th>Entry</th><th>Exit week</th><th>Exit</th><th>Result</th></tr></thead><tbody>${D.exits.map(r=>`<tr>
+    t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Signal week</th><th>Entry</th><th>Exit week</th><th>Exit</th><th>Result</th></tr></thead><tbody>${srt(D.exits).map(r=>`<tr>
       ${nm(r)}<td>${dl(r.sd)}</td><td>₹${fmt(r.entry)}</td><td>${dl(r.xd)}</td><td>₹${fmt(r.exit)}</td><td>${pc(r.r)}</td></tr>`).join("") || '<tr><td colspan="6" class="mut">No exits recently.</td></tr>'}</tbody>`;
   }
 }
