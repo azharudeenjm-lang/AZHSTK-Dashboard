@@ -154,14 +154,14 @@ def build(px, stocks, rs_frame=None, today=None):
                 sc.setdefault(t, {})["t3_near"] = 1
                 geo[t] = g
     # ---------- 2-year walk-forward: every breakout as it would have been seen at the time ----------
-    stats, exits = _history(c, h, l, sma10, rs_frame, cols, ds)
+    stats, exits, log = _history(c, h, l, sma10, rs_frame, cols, ds)
     for r in brks:
         x = exits.get((r["sym"], r["bd"]))
         if x:
             r["xd"], r["xp"], r["xg"], r["why"], r["mx"] = x
     brks.sort(key=lambda x: (x["ago"], not x["strong"], -(x["rs"] or 0)))
     near.sort(key=lambda x: x["dist"])
-    return {"brk": brks, "near": near[:80], "forming": forming, "stats": stats}, sc, geo
+    return {"brk": brks, "near": near[:80], "forming": forming, "stats": stats, "log": log}, sc, geo
 
 
 def _history(c, h, l, sma10, rs_frame, cols, ds, weeks=104):
@@ -170,7 +170,7 @@ def _history(c, h, l, sma10, rs_frame, cols, ds, weeks=104):
     start = max(60, n - weeks)
     res = {"all": [], "strong": []}
     opened = {"all": 0, "strong": 0}
-    exits = {}
+    exits, log = {}, []
     rs_a = rs_frame.reindex(index=c.index, columns=cols).to_numpy(float) if rs_frame is not None else None
     for j, t in enumerate(cols):
         cc, hh, ll, sm = c[t].to_numpy(float), h[t].to_numpy(float), l[t].to_numpy(float), sma10[t].to_numpy(float)
@@ -200,6 +200,13 @@ def _history(c, h, l, sma10, rs_frame, cols, ds, weeks=104):
                     ex, why = k, ("Stop-loss" if trail == ll[i] else "Trailing stop")
                     break
             busy_until = ex if ex is not None else n
+            k_ = ex if ex is not None else n - 1
+            while k_ > i and not np.isfinite(cc[k_]):
+                k_ -= 1
+            xg = (cc[k_] / cc[i] - 1) * 100
+            # trade log: sym, entry week, entry, exit week, exit (or price now), gain, max gain, reason, weeks held, strong
+            log.append([t[:-3], ds[i], round(float(cc[i]), 2), ds[ex] if ex is not None else None, round(float(cc[k_]), 2), round(float(xg), 1),
+                        round(float((np.nanmax(cc[i:k_ + 1]) / cc[i] - 1) * 100), 1), why, int(k_ - i), strong])
             if ex is not None:
                 g = (cc[ex] / cc[i] - 1) * 100
                 exits[(t[:-3], ds[i])] = (ds[ex], round(float(cc[ex]), 2), round(float(g), 1), why,
@@ -221,4 +228,4 @@ def _history(c, h, l, sma10, rs_frame, cols, ds, weeks=104):
                     "avg": round(float(g.mean()), 1) if v else None,
                     "sl_hit": round(float(np.mean([x[1] == "Stop-loss" for x in v])) * 100) if v else None,
                     "from": ds[start] if start < n else None}
-    return stats, exits
+    return stats, exits, log

@@ -66,19 +66,29 @@ TEMPLATE = r"""
     <button role="tab" data-v="tt7" aria-selected="false">Trend Template 7/8</button>
     <button role="tab" data-v="t3" aria-selected="false">3-touch trendline breakouts</button>
     <button role="tab" data-v="t3n" aria-selected="false">Near a 3-touch trendline</button>
+    <button role="tab" data-v="log" aria-selected="false">All past trades (2 years)</button>
   </div>
   <div class="tools">
     <label class="tog">Risk per trade ₹ <input type="number" id="risk" min="0" step="500" placeholder="e.g. 5000"></label>
     <label class="tog"><input type="checkbox" id="clean" checked> Hide stocks under surveillance</label>
     <label class="tog"><input type="checkbox" id="qab"> Quality A or B only</label>
-    <label class="tog">Sort by <select id="sortk" style="font:inherit;padding:4px 6px;border-radius:8px;border:1px solid var(--line,#ccc);background:var(--panel,#fff);color:inherit"></select></label>
-    <button type="button" id="sortd" class="tog" title="Reverse the order" style="font:inherit;cursor:pointer;padding:4px 10px;border-radius:8px;border:1px solid var(--line,#ccc);background:var(--panel,#fff);color:inherit"></button>
+    <label class="tog">Sort by <select id="sortk" class="sel"></select></label>
+    <button type="button" id="sortd" class="tog sel" title="Reverse the order" style="cursor:pointer"></button>
+  </div>
+  <div class="tools" id="logbar" style="display:none">
+    <label class="tog">Rule <select id="lg_set" class="sel"><option value="tt8">Trend Template 8/8</option><option value="tt7">Trend Template 7/8</option><option value="t3">3-touch breakouts (all)</option><option value="t3s">3-touch breakouts (strong only)</option></select></label>
+    <label class="tog">Show <select id="lg_st" class="sel"><option value="">All trades</option><option value="open">Still open</option><option value="closed">Closed</option><option value="win">Closed with a profit</option><option value="loss">Closed with a loss</option></select></label>
+    <label class="tog">Entry year <select id="lg_y" class="sel"><option value="">All</option></select></label>
+    <label class="tog">Stock <input type="search" id="lg_q" placeholder="e.g. HFCL" style="width:110px"></label>
+    <button type="button" id="lg_csv" class="tog sel" style="cursor:pointer">⬇ Download CSV</button>
   </div>
   <div class="sub" id="hint" style="margin:0 0 12px"></div>
   <div class="tbl"><table id="t"></table></div>
+  <div id="more" style="margin:10px 0 0"></div>
 </section>
 <p class="note">Signals use weekly bars. The week in progress is marked <span class="new form">forming</span>: it only counts if it still qualifies at Friday's close. Stops are checked on weekly closes, so a stock can dip below a stop during the week and recover. For information only, not investment advice.</p>
 </div>
+<style>.sel{font:inherit;padding:4px 8px;border-radius:8px;border:1px solid var(--line,#ccc);background:var(--panel,#fff);color:inherit}</style>
 <script>
 const D = __DATA__;
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -126,6 +136,7 @@ const SORTS = {
   tt: TT(true), tt7: TT(false),
   t3: [["Default (newest first)", null, 1], ["Breakout date", r=>r.bd, -1], RS, ["Gain", r=>r.xd ? r.xg : r.gain, -1], ["Max gain since breakout", r=>r.mx, -1],
        ["Breakout week gain", r=>r.wk, -1], ["Touches", r=>r.touches, -1], ["Trendline length (weeks)", r=>r.span, -1], ["Strong first", r=>r.strong?1:0, -1], NAME],
+  log: [["Entry date", r=>r.ed, -1], ["Exit date", r=>r.xd, -1], ["Gain", r=>r.g, -1], ["Max gain", r=>r.mx, -1], ["Days / weeks held", r=>r.days, -1], ["Entry price", r=>r.ep, -1], NAME],
   t3n: [["Default", null, 1], ["Distance to trigger", r=>r.dist, 1], RS, ["Touches", r=>r.touches, -1], ["Trendline length (weeks)", r=>r.span, -1], NAME],
 };
 const sortK = document.getElementById("sortk"), sortD = document.getElementById("sortd");
@@ -155,9 +166,65 @@ function srt(rows){
 }
 sortK.onchange = () => { sortDir = ((SORTS[view]||[])[+sortK.value]||[0,0,1])[2]; store.set("azh:sort:"+view, sortK.value+","+sortDir); sortView = null; draw(); };
 sortD.onclick = () => { sortDir = -sortDir; store.set("azh:sort:"+view, sortK.value+","+sortDir); sortView = null; draw(); };
+// ---------- all past trades (loaded only when the tab is opened) ----------
+let LOG = null, logN = 300;
+const lg = id => document.getElementById(id);
+function logRows(){
+  if (!LOG) return [];
+  const set = lg("lg_set").value, st = lg("lg_st").value, y = lg("lg_y").value, q = lg("lg_q").value.trim().toUpperCase();
+  const src = LOG[set==="t3s" ? "t3" : set] || [];
+  const rows = [];
+  for (const a of src){
+    const r = {sym:a[0], name:LOG.names[a[0]]||"", ed:a[1], ep:a[2], xd:a[3], xp:a[4], g:a[5], mx:a[6], why:a[7], days:a[8], strong:!!a[9]};
+    if (set==="t3s" && !r.strong) continue;
+    if (st==="open" && r.xd) continue;
+    if (st==="closed" && !r.xd) continue;
+    if (st==="win" && !(r.xd && r.g > 0)) continue;
+    if (st==="loss" && !(r.xd && r.g <= 0)) continue;
+    if (y && !r.ed.startsWith(y)) continue;
+    if (q && !r.sym.includes(q) && !r.name.toUpperCase().includes(q)) continue;
+    rows.push(r);
+  }
+  return rows;
+}
+function drawLog(t, hint){
+  const more = lg("more");
+  if (!LOG){
+    hint.textContent = "Loading every trade of the last 2 years…"; t.innerHTML = ""; more.innerHTML = "";
+    fetch("trade_log.json", {cache:"no-cache"}).then(r=>r.ok?r.json():Promise.reject()).then(j=>{ LOG = j;
+      const ys = new Set(); ["tt8","tt7","t3"].forEach(k=>(j[k]||[]).forEach(a=>ys.add(a[1].slice(0,4))));
+      lg("lg_y").innerHTML = '<option value="">All</option>' + [...ys].sort().reverse().map(y=>`<option>${y}</option>`).join("");
+      if (view==="log") draw(); }).catch(()=>{ hint.textContent = "The trade list is not available yet. It appears after the next update."; });
+    return;
+  }
+  const rows = srt(logRows()), weekly = lg("lg_set").value.startsWith("t3");
+  const cl = rows.filter(r=>r.xd), w = cl.filter(r=>r.g>0), avg = a => a.length ? a.reduce((s,r)=>s+r.g,0)/a.length : null;
+  const sg = v => v==null ? "–" : (v>0?"+":"")+fmt(v,1)+"%";
+  hint.innerHTML = `<div class="kpi" style="margin:0 0 10px"><div><b>${rows.length.toLocaleString("en-IN")}</b><small>trades shown (${rows.length-cl.length} still open)</small></div>
+    <div><b>${cl.length?fmt(w.length/cl.length*100,0)+"%":"–"}</b><small>of ${cl.length.toLocaleString("en-IN")} closed made money</small></div>
+    <div><b class="ok">${sg(avg(w))}</b><small>average winner</small></div><div><b class="bad">${sg(avg(cl.filter(r=>r.g<=0)))}</b><small>average loser</small></div>
+    <div><b class="${(avg(cl)||0)>=0?'ok':'bad'}">${sg(avg(cl))}</b><small>average per closed trade · ${sg(avg(rows))} incl. open</small></div></div>
+    Every entry and exit the rule made in the last 2 years, with the same entry and exit rules as the tabs. Open trades show today's price. ${weekly ? "Held is in weeks." : "Held is in trading days."} Costs are not included.`;
+  const shown = rows.slice(0, logN);
+  t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Entry date</th><th>Entry</th><th>Exit date</th><th>Exit / now</th><th>Gain</th><th>Max gain</th><th>Held</th><th class="l">Exit reason</th></tr></thead><tbody>${shown.map(r=>`<tr>
+    ${nm(r)}<td>${dl(r.ed)}${r.strong?'<span class="new">strong</span>':""}</td><td>₹${fmt(r.ep)}</td><td>${r.xd?dl(r.xd):'<span class="new">open</span>'}</td>
+    <td>₹${fmt(r.xp)}${r.xd?"":'<small class="mut" style="display:block">now</small>'}</td><td>${pc(r.g)}</td><td>${pc(r.mx)}</td><td>${r.days}${weekly?" wk":" d"}</td><td class="l">${esc(r.why||(r.xd?"":"–"))}</td></tr>`).join("") || '<tr><td colspan="9" class="mut">No trades match.</td></tr>'}</tbody>`;
+  more.innerHTML = rows.length > logN ? `<button type="button" class="sel" style="cursor:pointer" id="lg_more">Show ${Math.min(500, rows.length-logN)} more (${rows.length-logN} hidden)</button>` : "";
+  if (lg("lg_more")) lg("lg_more").onclick = () => { logN += 500; draw(); };
+}
+["lg_set","lg_st","lg_y"].forEach(id=>lg(id).onchange = () => { logN = 300; draw(); });
+lg("lg_q").oninput = () => { logN = 300; draw(); };
+lg("lg_csv").onclick = () => {
+  const rows = srt(logRows()), q = v => `"${String(v??"").replace(/"/g,'""')}"`;
+  const csv = ["Symbol,Name,Entry date,Entry,Exit date,Exit or price now,Gain %,Max gain %,Held,Exit reason,Strong"].concat(rows.map(r=>[r.sym,r.name,r.ed,r.ep,r.xd||"open",r.xp,r.g,r.mx,r.days,r.why||"",r.strong?"yes":""].map(q).join(","))).join("\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], {type:"text/csv"})); a.download = `trades_${lg("lg_set").value}.csv`; document.body.appendChild(a); a.click(); a.remove();
+};
 function draw(){
   document.querySelectorAll(".tabs button").forEach(b=>b.setAttribute("aria-selected", b.dataset.v===view));
   const t = document.getElementById("t"), hint = document.getElementById("hint");
+  lg("logbar").style.display = view === "log" ? "" : "none"; lg("more").innerHTML = "";
+  document.querySelectorAll("#clean,#qab,#risk").forEach(e=>e.closest("label").style.display = view==="log" ? "none" : "");
+  if (view==="log"){ drawLog(t, hint); return; }
   if (view==="open"){
     const rows = srt(D.open.filter(keep));
     hint.innerHTML = `${rows.filter(r=>r.ago<=1).length} new signal(s) in the last two weeks, ${rows.length} open trade(s) in all. Enter at about the signal price; the quantity uses your risk per trade and the stop-loss.`;

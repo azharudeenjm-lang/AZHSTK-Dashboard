@@ -119,7 +119,8 @@ def build(px, stocks):
     wend = np.r_[wk[1:] != wk[:-1], T[-1].weekday() >= 4]
     col = {t: j for j, t in enumerate(cols)}
     last_tr = {"8": {}, "7": {}}
-    stats = {}
+    stats, log = {}, {"8": [], "7": []}
+    sinc = since.strftime("%Y-%m-%d")
     for rule, need in (("8", 8), ("7", 7)):
         done = []
         for t in liquid:
@@ -149,9 +150,15 @@ def build(px, stocks):
                     if T[inside["i"]] >= since:
                         done.append((tr["g"], why))
                     last_tr[rule][t[:-3]] = tr
+                    if tr["ed"] >= sinc:     # trade log: sym, entry date, entry, exit date, exit, gain, max gain, reason, sessions held
+                        log[rule].append([t[:-3], tr["ed"], tr["ep"], tr["xd"], tr["xp"], float(tr["g"]), float(tr["mx"]), why, int(i - inside["i"])])
                     inside, armed = None, False
             if inside is not None:
                 c_ = Cn[-1, j]
+                if T[inside["i"]] >= since:
+                    log[rule].append([t[:-3], T[inside["i"]].strftime("%Y-%m-%d"), round(float(inside["e"]), 2), None, round(float(c_), 2),
+                                      round(float((c_ / inside["e"] - 1) * 100), 1), round(float((max(inside["mx"], c_) / inside["e"] - 1) * 100), 1),
+                                      None, int(len(T) - 1 - inside["i"])])
                 last_tr[rule][t[:-3]] = {"ed": T[inside["i"]].strftime("%Y-%m-%d"), "ep": round(float(inside["e"]), 2), "sl": round(float(inside["sl"]), 2),
                                          "xd": None, "xp": None, "g": round((c_ / inside["e"] - 1) * 100, 1), "open": True,
                                          "mx": round((max(inside["mx"], c_) / inside["e"] - 1) * 100, 1)}
@@ -174,4 +181,4 @@ def build(px, stocks):
         r["tr"] = last_tr["7"].get(r["sym"])
     rows.sort(key=lambda x: (not x.get("lead"), -(x["rs"] or 0)))
     near.sort(key=lambda x: -(x["rs"] or 0))
-    return {"all": rows, "near": near[:150], "n_all": len(rows), "stats": stats}, recs, sc
+    return {"all": rows, "near": near[:150], "n_all": len(rows), "stats": stats, "log": log}, recs, sc

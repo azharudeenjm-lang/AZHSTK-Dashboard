@@ -28,7 +28,7 @@ self.addEventListener("fetch", e => {
   e.respondWith(fetch(req, {cache: "no-cache"}).then(res => {
     // keep an offline copy of pages and small files only; the big screener data files and
     // zoom-out price files are skipped so the phone isn't rewriting megabytes every visit
-    const big = /screener_ser_|\/px\/|levels_charts|screener\.json/.test(req.url);
+    const big = /screener_ser_|\/px\/|levels_charts|screener\.json|trade_log/.test(req.url);
     if (res.ok && !big) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
     return res;
   }).catch(() => caches.match(req)));
