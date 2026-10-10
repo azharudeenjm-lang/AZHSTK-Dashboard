@@ -1,0 +1,58 @@
+{
+ "/api/corporates-pit": {
+  "ok": 1,
+  "fail": 0,
+  "codes": [],
+  "sample": "{\"acqNameList\":[],\"data\":[]}"
+ },
+ "/api/corporate-pledgedata": {
+  "ok": 1,
+  "fail": 0,
+  "codes": [],
+  "sample": "{\"comNameList\":[],\"data\":[]}"
+ },
+ "/api/snapshot-capital-market-largedeal": {
+  "ok": 1,
+  "fail": 0,
+  "codes": [],
+  "sample": "{\"as_on_date\":\"09-Oct-2026\",\"BULK_DEALS_DATA\":[{\"buySell\":\"BUY\",\"clientName\":\"JUMP TRADING FINANCIAL INDIA PRIVATE LIMITED\",\"date\":\"09-Oct-2026\",\"name\":\"AceVector Limited\",\"qty\":\"2362529\",\"remarks\":\"-\",\"symbol\":\"ACEVECTOR\",\"watp\":\"30.45\"},{\"buySell\":\"BUY\",\"clientName\":\"QE SECURITIES LLP\",\"date\":\"09-Oct-2026\",\"name\":\"AceVector Limited\",\"qty\":\"2527849\",\"remarks\":\"-\",\"symbol\":\"ACEVECTOR\",\"watp\":\"30.28\"},{\"buySell\":\"BUY\",\"clientName\":\"MATHISYS QUANTCAP LLP\",\"date\":\"09-Oct-2026\",\"name\":\"AceVector Limited\",\"qty\":\"3418489\",\"remarks\":\"-\",\"symbol\":\"ACEVECTOR\",\"watp\":\"30.42\"},{\"buySell\":\"BUY\",\"clientName\":\"PRIJAL TRADEFIN LLP\",\"date\":\"09-Oct-2026\",\"name\":\"Adroit Industries (I) Ltd\",\"qty\":\"268700\",\"remarks\":\"-\",\"symbol\":\"ADROITIND\",\"watp\":\"201.95\"},{\"buySell\":\"BUY\",\"clientName\":\"MOHAMED IRFAN MOHAMED LATIF SHAIKH\",\"date\":\"09-Oct-2026\",\"name\":\"Aqylon Nexus Limited\",\"qty\":\"2473659\",\"remarks\":\"-\",\"symbol\":\"AQYLON\",\"watp\":\"15.75\"},{\"buySell\":\"BUY\",\"clientName\":\"BULLPULSE MARKETEDGE PRIVATE LIMITED\",\"date\":\"09-Oct-2026\",\"name\":\"Arfin India Limited\",\"qty\":\"919253\",\"remarks\":\"-\",\"symbol\":\"ARFIN\",\"watp\":\"109.62\"},{\"buySell\":\"BUY\",\"clientName\":\"VAIBHAV RAJENDRA DOSHI\",\"date\":\"09-Oct-2026\",\"name\":\"Arisinfra Solutions Ltd\",\"qty\":\"499739\",\"remarks\":\"-\",\"symbol\":\"ARIS\",\"watp\":\"142.1\"},{\"buySell\":\"BUY\",\"clientName\":\"KRITAGYATA TRUST\",\"date\":\"09-Oct-2026\",\"name\":\"Awfis Space Solutions Ltd\",\"qty\":\"1150000\",\"remarks\":\"-\",\"symbol\":\"AWFIS\",\"watp\":\"244.97\"},{\"buySell\":\"BUY\",\"clientName\":\"ACME CAPITAL MARKE"
+ },
+ "/api/reportASM": {
+  "ok": 1,
+  "fail": 0,
+  "codes": [],
+  "sample": "{\"longterm\":{\"data\":[{\"asmSurvIndicator\":\"Stage I\",\"asmTime\":\"09-Oct-2026\",\"companyName\":\"A2Z Infra Engineering Limited\",\"isin\":\"INE619I01012\",\"series\":null,\"survCode\":\"LTASM - I (13)\",\"survDesc\":\"Long Term Additional Surveillance Measure (LTASM) - Stage I\",\"symbol\":\"A2ZINFRA\",\"srno\":1},{\"asmSurvIndicator\":\"Stage I\",\"asmTime\":\"09-Oct-2026\",\"companyName\":\"Aarey Drugs & Pharmaceuticals Limited\",\"isin\":\"INE198H01019\",\"series\":null,\"survCode\":\"LTASM - I (13)\",\"survDesc\":\"Long Term Additional Surveillance Measure (LTASM) - Stage I\",\"symbol\":\"AAREYDRUGS\",\"srno\":2},{\"asmSurvIndicator\":\"Stage I\",\"asmTime\":\"09-Oct-2026\",\"companyName\":\"Artemis Electricals and Projects Limited\",\"isin\":\"INE757T01025\",\"series\":null,\"survCode\":\"LTASM - I (13)\",\"survDesc\":\"Long Term Additional Surveillance Measure (LTASM) - Stage I\",\"symbol\":\"AEPL\",\"srno\":3},{\"asmSurvIndicator\":\"Stage I\",\"asmTime\":\"09-Oct-2026\",\"companyName\":\"Aequs Limited\",\"isin\":\"INE947N01017\",\"series\":null,\"survCode\":\"LTASM - I (13)\",\"survDesc\":\"Long Term Additional Surveillance Measure (LTASM) - Stage I\",\"symbol\":\"AEQUS\",\"srno\":4},{\"asmSurvIndicator\":\"Stage I\",\"asmTime\":\"09-Oct-2026\",\"companyName\":\"Anlon Healthcare Limited\",\"isin\":\"INE0Y8W01025\",\"series\":null,\"survCode\":\"LTASM - I (13)\",\"survDesc\":\"Long Term Additional Surveillance Measure (LTASM) - Stage I\",\"symbol\":\"AHCL\",\"srno\":5},{\"asmSurvIndicator\":\"Stage I\",\"asmTime\":\"09-Oct-2026\",\"companyName\":\"Aimtron Electronics Limited\",\"isin\":\"INE0RUV01018\",\"series\":null,\"survCode\":\"LTASM - I"
+ },
+ "/api/reportGSM": {
+  "ok": 1,
+  "fail": 0,
+  "codes": [],
+  "sample": "[{\"companyName\":\"AGS Transact Technologies Limited\",\"gsmStage\":\"LVIII\",\"gsmTime\":\"09-Oct-2026 08:14:02\",\"isin\":\"INE583L01014\",\"survCode\":\"IBC I & GSM 0 (58)\",\"survDesc\":\"ASM IBC Stage I and GSM Stage 0\",\"symbol\":\"AGSTRA\",\"srno\":1},{\"companyName\":\"Ankit Metal & Power Limited\",\"gsmStage\":\"LXIII\",\"gsmTime\":\"09-Oct-2026 08:14:02\",\"isin\":\"INE106I01010\",\"survCode\":\"GSM I & IBC - Receipt (63)\",\"survDesc\":\"GSM stage I and Insolvency and Bankruptcy Code (IBC) - Receipt of Disclosure or Recommenced scrip\",\"symbol\":\"ANKITMETAL\",\"srno\":2},{\"companyName\":\"Aqylon Nexus Limited\",\"gsmStage\":\"L\",\"gsmTime\":\"09-Oct-2026 08:14:02\",\"isin\":\"INE416A01051\",\"survCode\":\"LTASM I & GSM 0 (50)\",\"survDesc\":\"LTASM Stage I and GSM Stage 0\",\"symbol\":\"AQYLON\",\"srno\":3},{\"companyName\":\"Asian Tea & Exports Limited\",\"gsmStage\":\"0\",\"gsmTime\":\"09-Oct-2026 08:14:02\",\"isin\":\"INE822B01017\",\"survCode\":\"GSM - 0 (99)\",\"survDesc\":\"Shortlisted under Graded Surveillance Measure\",\"symbol\":\"ASIANTNE\",\"srno\":4},{\"companyName\":\"Amit Spinning Industries Limited\",\"gsmStage\":\"VI\",\"gsmTime\":\"09-Oct-2026 08:14:02\",\"isin\":\"INE988A01026\",\"survCode\":\"GSM - VI (6)\",\"survDesc\":\"Graded Surveillance Measure - Stage VI\",\"symbol\":\"ASIL\",\"srno\":5},{\"companyName\":\"ATN International Limited\",\"gsmStage\":\"VI\",\"gsmTime\":\"09-Oct-2026 08:14:02\",\"isin\":\"INE803A01027\",\"survCode\":\"GSM - VI (6)\",\"survDesc\":\"Graded Surveillance Measure - Stage VI\",\"symbol\":\"ATNINTER\",\"srno\":6},{\"companyName\":\"Balkrishna Paper Mills Limited\",\"gsmStage\":\"0\",\"gsmTime\":\"09-"
+ },
+ "/api/results-comparision": {
+  "ok": 400,
+  "fail": 0,
+  "codes": [],
+  "sample": "{\"resCmpData\":[{\"re_amt_grs_np_asst\":null,\"re_bal_rbi_oth_bnk_funds\":null,\"re_basic_eps\":null,\"re_basic_eps_for_cont_dic_opr\":\"0\",\"re_bsc_eps_bfr_exi\":null,\"re_cap_ade_rat\":null,\"re_cet_1_ret\":null,\"re_con_pro_loss\":\"-8.48\",\"re_create_dt\":\"15-FEB-2025\",\"re_curr_tax\":\"0\",\"re_debt_eqt_rat\":null,\"re_debt_rdmption\":null,\"re_debt_ser_cov\":null,\"re_deff_tax\":\"-182.66\",\"re_depr_und_exp\":\"22.32\",\"re_desc_note_fin\":\"-\",\"re_desc_note_seg\":\"-\",\"re_dil_eps_bfr_exi\":null,\"re_dilut_eps_for_cont_dic_opr\":\"0\",\"re_diluted_eps\":null,\"re_excepn_items\":null,\"re_excepn_items_new\":\"0\",\"re_extraord_items\":null,\"re_face_val\":\"10\",\"re_face_value_debt\":null,\"re_from_dt\":\"01-OCT-2024\",\"re_goi_per_shhd\":null,\"re_grs_npa\":null,\"re_grs_npa_per\":null,\"re_inc_dre_sttr\":\"0\",\"re_income_inv\":null,\"re_int_dis_adv_bills\":null,\"re_int_earned\":null,\"re_int_expd\":null,\"re_int_new\":\"46.34\",\"re_int_ser_cov\":null,\"re_minority_int\":null,\"re_net_profit\":\"-8.48\",\"re_net_sale\":\"273.72\",\"re_notes_to_ac\":\"\",\"re_oper_exp\":null,\"re_oper_exp_bef_pro_cont\":null,\"re_oth\":null,\"re_oth_exp\":\"248.09\",\"re_oth_inc\":null,\"re_oth_inc_new\":\"0\",\"re_oth_oper_exp\":null,\"re_oth_pro_cont\":null,\"re_oth_tot_exp\":\"464.86\",\"re_paid_debt\":null,\"re_pdup\":\"26040.37\",\"re_per_grs_npa\":null,\"re_pro_aft_int_bef_excep\":null,\"re_pro_los_frm_dis_opr\":\"0\",\"re_pro_loss_bef_tax\":\"-191.14\",\"re_pro_loss_bef_tax_sum\":null,\"re_prolos_dis_opr_aftr_tax\":\"0\",\"re_proloss_ord_act\":\"-8.48\",\"re_prov_emp_pay\":null,\"re_pur_trd_goods\":\"0\",\"re_rawmat_consump\":\"0\",\"re_remar"
+ },
+ "results_parsed": {
+  "with_figures": 328,
+  "tried": 400,
+  "cached": 2571,
+  "example": {
+   "20MICRONS": {
+    "res_end": "2024-12-31",
+    "sg": 22.7,
+    "pg": 0.8,
+    "eps_ttm": 15.25,
+    "npm_q": 5.4,
+    "at": "2026-10-10"
+   }
+  }
+ },
+ "_run": {
+  "at": "2026-10-11 02:41 IST",
+  "mode": "full",
+  "seconds": 1368
+ }
+}
