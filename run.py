@@ -244,6 +244,14 @@ def main():
             print(f"  trend template: {tt_page['n_all']} pass all 8, {len(tt_page['near'])} pass 7")
         except Exception as e:
             print(f"  ! trend template skipped: {str(e)[:120]}")
+        try:            # every trade of the last 2 years, loaded by the "All past trades" tab only when opened
+            ttl = (by_page.get("tt") or {}).pop("log", None) or {}
+            tl = {"generated": by_page.get("generated"), "names": {x["sym"]: x["name"] for x in stocks},
+                  "tt8": ttl.get("8", []), "tt7": ttl.get("7", []), "t3": (by_page.get("t3") or {}).pop("log", None) or []}
+            (DOCS / "trade_log.json").write_text(json.dumps(clean(tl), separators=(",", ":")), encoding="utf-8")
+            print(f"  trade log: {len(tl['tt8'])} (8/8), {len(tl['tt7'])} (7/8), {len(tl['t3'])} (3-touch) trades")
+        except Exception as e:
+            print(f"  ! trade log skipped: {str(e)[:120]}")
         buy_page.render(clean(by_page))
         for t, r in by_sc.items():
             sg["w"].setdefault(t, {}).update(r)
