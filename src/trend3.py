@@ -152,6 +152,71 @@ def build(px, stocks, rs_frame=None, today=None):
                              "rs": round(rsv * 100) if rsv is not None else None, "top": round(float(hh[A]), 2), "top_d": ds[f0 + A]})
                 sc.setdefault(t, {})["t3_near"] = 1
                 geo[t] = g
+    # ---------- 2-year walk-forward: every breakout as it would have been seen at the time ----------
+    stats, exits = _history(c, h, l, sma10, rs_frame, cols, ds)
+    for r in brks:
+        x = exits.get((r["sym"], r["bd"]))
+        if x:
+            r["xd"], r["xp"], r["xg"], r["why"] = x
     brks.sort(key=lambda x: (x["ago"], not x["strong"], -(x["rs"] or 0)))
     near.sort(key=lambda x: x["dist"])
-    return {"brk": brks, "near": near[:80], "forming": forming}, sc, geo
+    return {"brk": brks, "near": near[:80], "forming": forming, "stats": stats}, sc, geo
+
+
+def _history(c, h, l, sma10, rs_frame, cols, ds, weeks=104):
+    """Replays the detector week by week over the last 2 years. Returns (stats, {(sym, breakout date): exit info})."""
+    n = len(c.index)
+    start = max(60, n - weeks)
+    res = {"all": [], "strong": []}
+    opened = {"all": 0, "strong": 0}
+    exits = {}
+    rs_a = rs_frame.reindex(index=c.index, columns=cols).to_numpy(float) if rs_frame is not None else None
+    for j, t in enumerate(cols):
+        cc, hh, ll, sm = c[t].to_numpy(float), h[t].to_numpy(float), l[t].to_numpy(float), sma10[t].to_numpy(float)
+        if np.isfinite(cc).sum() < 60:
+            continue
+        hh = np.where(np.isfinite(hh), hh, cc)
+        ll = np.where(np.isfinite(ll), ll, cc)
+        busy_until = -1
+        for i in range(start, n):
+            if i <= busy_until or not np.isfinite(cc[i]) or not np.isfinite(cc[i - 1]):
+                continue
+            if not (cc[i] > np.nanmax(cc[max(0, i - 4):i]) and cc[i] > cc[i - 1]):
+                continue
+            try:
+                r = detect(hh[:i + 1], cc[:i + 1])
+            except Exception:
+                continue
+            if not r or r["brk"] != i:
+                continue
+            wk = cc[i] / cc[i - 1] - 1
+            rsv = rs_a[i, j] if rs_a is not None else np.nan
+            strong = bool(wk >= 0.08 and np.isfinite(rsv) and rsv >= 0.6)
+            ex, why = None, None
+            for k in range(i + 1, n):
+                trail = max(ll[i], sm[k] if np.isfinite(sm[k]) else -1)
+                if np.isfinite(cc[k]) and cc[k] < trail:
+                    ex, why = k, ("Stop-loss" if trail == ll[i] else "Trailing stop")
+                    break
+            busy_until = ex if ex is not None else n
+            if ex is not None:
+                g = (cc[ex] / cc[i] - 1) * 100
+                exits[(t[:-3], ds[i])] = (ds[ex], round(float(cc[ex]), 2), round(float(g), 1), why)
+                res["all"].append((g, why))
+                if strong:
+                    res["strong"].append((g, why))
+            else:
+                opened["all"] += 1
+                if strong:
+                    opened["strong"] += 1
+    stats = {}
+    for k, v in res.items():
+        g = np.array([x[0] for x in v]) if v else np.array([0.0])
+        stats[k] = {"n": len(v) + opened[k], "closed": len(v), "open": opened[k],
+                    "win": round(float(np.mean(g > 0)) * 100) if v else None,
+                    "avg_win": round(float(g[g > 0].mean()), 1) if v and (g > 0).any() else None,
+                    "avg_loss": round(float(g[g <= 0].mean()), 1) if v and (g <= 0).any() else None,
+                    "avg": round(float(g.mean()), 1) if v else None,
+                    "sl_hit": round(float(np.mean([x[1] == "Stop-loss" for x in v])) * 100) if v else None,
+                    "from": ds[start] if start < n else None}
+    return stats, exits

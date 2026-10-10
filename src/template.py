@@ -10,7 +10,8 @@ All 8 must pass:
   7. Price within 25% of its 52-week high
   8. Relative strength rank 70+ (IBD-style: last 12 months, latest quarter weighted double,
      ranked against all liquid stocks; ideally 80-90+)
-Exit guide: a close below the 50-day MA.
+Exit (dashboard rule, not part of the template): stop-loss 8% below entry,
+then a weekly close below the 50-day MA.
 
 Tested on this dashboard's 5 years of weekly prices (weekly stand-ins for the daily averages;
 entry when a stock first passes all 8, exit on a weekly close below the 10-week average):
@@ -30,6 +31,7 @@ META = [
     ("tt_7", "Trend Template: 7 of 8 (one check missing)", "s"),
     ("tt_lead", "Trend Template 8/8 with RS 90+ and within 5% of the 52-week high", "s"),
 ]
+STOP = 0.08
 LABELS = ["Price above the 150 and 200-day MAs", "150-day MA above the 200-day MA", "200-day MA rising for 1 month+",
           "50-day MA above the 150 and 200-day MAs", "Price above the 50-day MA", "At least 30% above the 52-week low",
           "Within 25% of the 52-week high", "RS rank 70+"]
@@ -104,6 +106,69 @@ def build(px, stocks):
         else:
             near.append(row)
             sc[t] = {"tt_7": 1}
+    # ---------- trades (dashboard rule, not part of the template) ----------
+    # entry: close on the first day the stock reaches the rule (a fresh pass; after an exit the count must drop first)
+    # stop-loss: 8% below entry (Minervini's 7-8% max loss), hit intraday -> exit at the stop (or the open on a gap down)
+    # trail: a weekly close (last trading day of the week) below the 50-day MA
+    since = T[-1] - pd.Timedelta(days=730)
+    Cn, S50 = C.to_numpy(float), s50.to_numpy(float)
+    Ln = L.reindex(columns=cols).to_numpy(float)
+    On = px["Open"].reindex(index=T, columns=cols).to_numpy(float) if "Open" in px else np.full_like(Cn, np.nan)
+    CNT = cnt.to_numpy(int)
+    wk = T.to_period("W-FRI")
+    wend = np.r_[wk[1:] != wk[:-1], T[-1].weekday() >= 4]
+    col = {t: j for j, t in enumerate(cols)}
+    last_tr = {"8": {}, "7": {}}
+    stats = {}
+    for rule, need in (("8", 8), ("7", 7)):
+        done = []
+        for t in liquid:
+            j = col[t]
+            inside, armed = None, False
+            for i in range(250, len(T)):
+                c_ = Cn[i, j]
+                if not np.isfinite(c_):
+                    continue
+                if inside is None:
+                    if CNT[i, j] < need:
+                        armed = True
+                    elif armed:
+                        inside = {"i": i, "e": c_, "sl": c_ * (1 - STOP)}
+                    continue
+                xp, why = None, None
+                if np.isfinite(Ln[i, j]) and Ln[i, j] <= inside["sl"]:
+                    o = On[i, j]
+                    xp, why = (min(o, inside["sl"]) if np.isfinite(o) else inside["sl"]), "Stop-loss"
+                elif wend[i] and np.isfinite(S50[i, j]) and c_ < S50[i, j]:
+                    xp, why = c_, "Weekly close below 50-day MA"
+                if xp is not None:
+                    tr = {"ed": T[inside["i"]].strftime("%Y-%m-%d"), "ep": round(float(inside["e"]), 2), "sl": round(float(inside["sl"]), 2),
+                          "xd": T[i].strftime("%Y-%m-%d"), "xp": round(float(xp), 2), "g": round((xp / inside["e"] - 1) * 100, 1), "why": why}
+                    if T[inside["i"]] >= since:
+                        done.append((tr["g"], why))
+                    last_tr[rule][t[:-3]] = tr
+                    inside, armed = None, False
+            if inside is not None:
+                c_ = Cn[-1, j]
+                last_tr[rule][t[:-3]] = {"ed": T[inside["i"]].strftime("%Y-%m-%d"), "ep": round(float(inside["e"]), 2), "sl": round(float(inside["sl"]), 2),
+                                         "xd": None, "xp": None, "g": round((c_ / inside["e"] - 1) * 100, 1), "open": True}
+        g = np.array([x[0] for x in done]) if done else np.array([0.0])
+        og = [float(v["g"]) for v in last_tr[rule].values() if v.get("open") and v["ed"] >= since.strftime("%Y-%m-%d")]
+        n_open = len(og)
+        ga = np.array([x[0] for x in done] + og) if done or og else np.array([0.0])
+        stats[rule] = {"n": len(done) + n_open, "closed": len(done), "open": n_open,
+                       "win": round(float(np.mean(g > 0)) * 100) if done else None,
+                       "avg_win": round(float(g[g > 0].mean()), 1) if (g > 0).any() else None,
+                       "avg_loss": round(float(g[g <= 0].mean()), 1) if (g <= 0).any() else None,
+                       "avg": round(float(g.mean()), 1) if done else None,
+                       "sl_hit": round(float(np.mean([x[1] == "Stop-loss" for x in done])) * 100) if done else None,
+                       "avg_all": round(float(ga.mean()), 1) if done or og else None,
+                       "win_all": round(float(np.mean(ga > 0)) * 100) if done or og else None,
+                       "from": since.strftime("%Y-%m-%d")}
+    for r in rows:
+        r["tr"] = last_tr["8"].get(r["sym"])
+    for r in near:
+        r["tr"] = last_tr["7"].get(r["sym"])
     rows.sort(key=lambda x: (not x.get("lead"), -(x["rs"] or 0)))
     near.sort(key=lambda x: -(x["rs"] or 0))
-    return {"all": rows, "near": near[:150], "n_all": len(rows)}, recs, sc
+    return {"all": rows, "near": near[:150], "n_all": len(rows), "stats": stats}, recs, sc

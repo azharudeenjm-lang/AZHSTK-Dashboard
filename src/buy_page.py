@@ -72,7 +72,7 @@ TEMPLATE = r"""
     <label class="tog"><input type="checkbox" id="clean" checked> Hide stocks under surveillance</label>
     <label class="tog"><input type="checkbox" id="qab"> Quality A or B only</label>
   </div>
-  <p class="sub" id="hint"></p>
+  <div class="sub" id="hint" style="margin:0 0 12px"></div>
   <div class="tbl"><table id="t"></table></div>
 </section>
 <p class="note">Signals use weekly bars. The week in progress is marked <span class="new form">forming</span>: it only counts if it still qualifies at Friday's close. Stops are checked on weekly closes, so a stock can dip below a stop during the week and recover. For information only, not investment advice.</p>
@@ -103,6 +103,14 @@ const flags = f => (f||[]).map(x=>`<span class="flag">${esc(x)}</span>`).join(""
 const qabEl = document.getElementById("qab"); qabEl.checked = store.get("azh:buyqab") === "1";
 const keep = r => (!cleanEl.checked || !(r.flags||[]).some(x=>x.startsWith("Surveillance"))) && (!qabEl.checked || ["A","B"].includes(r.grade));
 const nm = r => `<td class="name"><button class="psym" data-p="${esc(r.sym)}">${esc(r.sym)}</button><small>${esc(r.name||"")}${r.sector?" · "+esc(r.sector):""}</small></td>`;
+const statBox = (S, title) => !S || !S.n ? "" : `<div class="kpi" style="margin:0 0 12px"><div><b>${S.n}</b><small>${esc(title)}: entries since ${dl(S.from)} (${S.open} still open)</small></div>
+  <div><b>${S.win!=null?fmt(S.win,0)+"%":"–"}</b><small>of ${S.closed} closed trades made money</small></div>
+  <div><b class="ok">${S.avg_win!=null?"+"+fmt(S.avg_win,1)+"%":"–"}</b><small>average winner</small></div>
+  <div><b class="bad">${S.avg_loss!=null?fmt(S.avg_loss,1)+"%":"–"}</b><small>average loss when stopped out${S.sl_hit!=null?` · ${S.sl_hit}% hit the first stop-loss`:""}</small></div>
+  <div><b class="${(S.avg||0)>=0?'ok':'bad'}">${S.avg!=null?(S.avg>0?"+":"")+fmt(S.avg,1)+"%":"–"}</b><small>average per closed trade</small></div>${S.avg_all!=null?`<div><b class="${S.avg_all>=0?'ok':'bad'}">${(S.avg_all>0?"+":"")+fmt(S.avg_all,1)}%</b><small>average incl. open trades at today's price (${S.win_all}% in profit)</small></div>`:""}</div>`;
+const stopOf = r => r.tr && r.tr.open && r.tr.sl ? r.tr.sl : r.price*0.92;
+const trCells = r => { const x = r.tr; if (!x) return '<td>–</td><td>–</td><td>–</td>';
+  return `<td>₹${fmt(x.ep)}<small class="mut" style="display:block">${dl(x.ed)}</small></td><td>${x.open ? `₹${fmt(r.price)}<small class="mut" style="display:block">now</small>` : `₹${fmt(x.xp)}<small class="bad" style="display:block">exited ${dl(x.xd)}${x.why?" · "+esc(x.why):""}</small>`}</td><td>${pc(x.g)}</td>`; };
 function draw(){
   document.querySelectorAll(".tabs button").forEach(b=>b.setAttribute("aria-selected", b.dataset.v===view));
   const t = document.getElementById("t"), hint = document.getElementById("hint");
@@ -122,22 +130,24 @@ function draw(){
       ${nm(r)}<td>₹${fmt(r.price)}</td><td>₹${fmt(r.trig)}</td><td>${fmt(r.dist,1)}%</td><td><b>₹${fmt(r.need8)}</b></td><td>${r.rs??"–"}</td><td>${pc(r.hi52)}</td><td class="l">${flags(r.flags)}</td></tr>`).join("") || '<tr><td colspan="8" class="mut">Nothing close to triggering.</td></tr>'}</tbody>`;
   } else if (view==="tt" || view==="tt7"){
     const T = D.tt || {all:[], near:[]}, rows = (view==="tt" ? T.all : T.near).filter(keep);
-    hint.innerHTML = view==="tt" ? `Minervini's Stage 2 filter: price above the 50, 150 and 200-day MAs in that order, the 200-day rising, 30%+ above the 52-week low, within 25% of the high, RS 70+. ${rows.length} stocks pass. <b>Leader</b> = RS 90+ and within 5% of the 52-week high: in testing these did about twice as well as all passes (48% won, about +15% per trade vs +7%). Exit guide: a close below the 50-day MA.`
+    hint.innerHTML = view==="tt" ? `Minervini's Stage 2 filter: price above the 50, 150 and 200-day MAs in that order, the 200-day rising, 30%+ above the 52-week low, within 25% of the high, RS 70+. ${rows.length} stocks pass. <b>Leader</b> = RS 90+ and within 5% of the 52-week high: in testing these did about twice as well as all passes (48% won, about +15% per trade vs +7%).`
       : "Stocks passing 7 of the 8 checks, with the one that is missing.";
-    t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Price</th><th>RS</th><th>From 52-wk high</th><th>Above 52-wk low</th><th>${view==="tt"?"Passing since":"Missing"}</th><th>Exit below (50-day MA)</th><th>Room</th><th>Qty</th></tr></thead><tbody>${rows.map(r=>`<tr>
-      ${nm(r)}<td>₹${fmt(r.price)}</td><td><b>${r.rs??"–"}</b>${r.lead?'<span class="new">leader</span>':""}</td><td>${pc(r.hi)}</td><td>+${fmt(r.lo,0)}%</td>
+    hint.innerHTML = statBox((T.stats||{})[view==="tt"?"8":"7"], view==="tt" ? "Trend Template 8/8" : "Trend Template 7/8") + hint.innerHTML +
+      ` <b>Exit rule (dashboard rule, not part of Minervini's template):</b> entry = close on the day the stock freshly reaches ${view==="tt"?"8":"7"} of 8; stop-loss 8% below entry (Minervini's 7–8% max loss); after that, sell on a weekly (Friday) close below the 50-day MA.`;
+    t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Entry</th><th>Now / exit</th><th>Gain</th><th>RS</th><th>From 52-wk high</th><th>Above 52-wk low</th><th>${view==="tt"?"Passing since":"Missing"}</th><th>Stop-loss (−8%)</th><th>Weekly close below (50-day MA)</th><th>Room</th><th>Qty</th></tr></thead><tbody>${rows.map(r=>`<tr>
+      ${nm(r)}${trCells(r)}<td><b>${r.rs??"–"}</b>${r.lead?'<span class="new">leader</span>':""}</td><td>${pc(r.hi)}</td><td>+${fmt(r.lo,0)}%</td>
       <td class="${view==="tt"?"":"l"}" style="white-space:normal">${view==="tt" ? (r.since?`${dl(r.since)} <small class="mut">(${r.days} sessions)</small>`:"–") : esc(r.missing.join("; "))}${view==="tt"&&r.ideal?'<small class="ok" style="display:block">200-day rising 4+ months</small>':""}</td>
-      <td>₹${fmt(r.exit)}</td><td>${pc(r.room)}</td><td>${qty(r.price, r.exit)}</td></tr>`).join("") || '<tr><td colspan="9" class="mut">None.</td></tr>'}</tbody>`;
+      <td>₹${fmt(stopOf(r))}</td><td>₹${fmt(r.exit)}</td><td>${pc(r.room)}</td><td>${qty(r.price, stopOf(r))}</td></tr>`).join("") || '<tr><td colspan="12" class="mut">None.</td></tr>'}</tbody>`;
   } else if (view==="t3" || view==="t3n"){
     const T = D.t3 || {brk:[], near:[]};
     const tl = r => `${r.touches} touches: ${r.tdates.map(d=>dl(d)).join(", ")} · ${r.span} weeks from the top ₹${fmt(r.top)} (${dl(r.top_d)})`;
     if (view==="t3"){
-      const allr = T.brk.filter(keep), rows = allr.filter(r=>r.alive), gone = allr.length - rows.length;
-      hint.innerHTML = (gone ? `${gone} older breakouts that have since closed below their trailing stop are hidden. ` : "") + "Weekly close above a falling trendline that started at a major top and was touched at least 3 times over 6+ months (like E2E in May 2026). <b>Strong</b> = breakout week up 8%+ and RS in the top 40%: in testing these did about twice as well (47% won, about +12% per trade vs +6.6% for all). Stop-loss = breakout-week low; trailing stop = 10-week average.";
-      t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Breakout week</th><th>Line at breakout</th><th>Close</th><th>Week</th><th>RS</th><th>Stop-loss</th><th>Trailing stop</th><th>Price</th><th>Gain</th><th>Qty</th><th class="l">Trendline</th></tr></thead><tbody>${rows.map(r=>`<tr>
+      const allr = T.brk.filter(keep), rows = allr.filter(r=>r.alive || r.xd), gone = allr.length - rows.length;
+      hint.innerHTML = statBox((T.stats||{}).all, "All 3-touch breakouts") + statBox((T.stats||{}).strong, "Strong ones only") + (gone ? `${gone} breakouts are hidden. ` : "") + "Weekly close above a falling trendline that started at a major top and was touched at least 3 times over 6+ months (like E2E in May 2026). <b>Strong</b> = breakout week up 8%+ and RS in the top 40%: in testing these did about twice as well (47% won, about +12% per trade vs +6.6% for all). Stop-loss = breakout-week low; trailing stop = 10-week average.";
+      t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Breakout week</th><th>Line at breakout</th><th>Entry (close)</th><th>Week</th><th>RS</th><th>Stop-loss</th><th>Trailing stop</th><th>Now / exit</th><th>Gain</th><th>Qty</th><th class="l">Trendline</th></tr></thead><tbody>${rows.map(r=>`<tr>
         ${nm(r)}<td>${dl(r.bd)}${r.forming?'<span class="new form">forming</span>':r.ago===0?'<span class="new">new</span>':""}${r.strong?'<span class="new">strong</span>':""}</td>
         <td>₹${fmt(r.lvl)}</td><td>₹${fmt(r.entry)}</td><td>${pc(r.wk)}</td><td>${r.rs??"–"}</td><td>₹${fmt(r.sl)}</td><td><b>₹${fmt(r.trail)}</b>${r.alive?"":'<small class="bad" style="display:block">closed below: exit</small>'}</td>
-        <td>₹${fmt(r.price)}</td><td>${pc(r.gain)}</td><td>${qty(r.price, r.trail)}</td><td class="l" style="white-space:normal;min-width:240px;font-size:.8rem">${esc(tl(r))}</td></tr>`).join("") || '<tr><td colspan="12" class="mut">No 3-touch trendline breakouts in the last 26 weeks.</td></tr>'}</tbody>`;
+        <td>${r.xd ? `₹${fmt(r.xp)}<small class="bad" style="display:block">exited ${dl(r.xd)} (${esc(r.why||"")})</small>` : `₹${fmt(r.price)}<small class="mut" style="display:block">now</small>`}</td><td>${pc(r.xd ? r.xg : r.gain)}</td><td>${r.xd ? "–" : qty(r.price, r.trail)}</td><td class="l" style="white-space:normal;min-width:240px;font-size:.8rem">${esc(tl(r))}</td></tr>`).join("") || '<tr><td colspan="12" class="mut">No 3-touch trendline breakouts in the last 26 weeks.</td></tr>'}</tbody>`;
     } else {
       const rows = T.near.filter(keep);
       hint.innerHTML = "Still under a falling trendline touched 3+ times, within 5% of it. A weekly close above the trigger (2% over the line) makes it a breakout; best if that week is up 8%+.";
