@@ -64,6 +64,7 @@ TEMPLATE = r"""
     <button role="tab" data-v="exits" aria-selected="false">Recent exits</button>
     <button role="tab" data-v="tt" aria-selected="false">Trend Template 8/8</button>
     <button role="tab" data-v="tt7" aria-selected="false">Trend Template 7/8</button>
+    <button role="tab" data-v="tte" aria-selected="false">Stage 2 start (early)</button>
     <button role="tab" data-v="t3" aria-selected="false">3-touch trendline breakouts</button>
     <button role="tab" data-v="t3n" aria-selected="false">Near a 3-touch trendline</button>
     <button role="tab" data-v="log" aria-selected="false">All past trades (2 years)</button>
@@ -76,11 +77,18 @@ TEMPLATE = r"""
     <button type="button" id="sortd" class="tog sel" title="Reverse the order" style="cursor:pointer"></button>
   </div>
   <div class="tools" id="logbar" style="display:none">
-    <label class="tog">Rule <select id="lg_set" class="sel"><option value="tt8">Trend Template 8/8</option><option value="tt7">Trend Template 7/8</option><option value="t3">3-touch breakouts (all)</option><option value="t3s">3-touch breakouts (strong only)</option></select></label>
+    <label class="tog">Rule <select id="lg_set" class="sel"><option value="tt8">Trend Template 8/8</option><option value="tt7">Trend Template 7/8</option><option value="tte">Stage 2 start (early)</option><option value="t3">3-touch breakouts (all)</option><option value="t3s">3-touch breakouts (strong only)</option></select></label>
     <label class="tog">Show <select id="lg_st" class="sel"><option value="">All trades</option><option value="open">Still open</option><option value="closed">Closed</option><option value="win">Closed with a profit</option><option value="loss">Closed with a loss</option></select></label>
     <label class="tog">Entry year <select id="lg_y" class="sel"><option value="">All</option></select></label>
     <label class="tog">Stock <input type="search" id="lg_q" placeholder="e.g. HFCL" style="width:110px"></label>
     <button type="button" id="lg_csv" class="tog sel" style="cursor:pointer">⬇ Download CSV</button>
+  </div>
+  <div class="tools" id="ttebar" style="display:none">
+    <b style="font-size:.85rem">Extra checks:</b>
+    <label class="tog"><input type="checkbox" data-ck="vol"> Breakout volume ≥ 1.5× its 50-day average</label>
+    <label class="tog"><input type="checkbox" data-ck="dry"> Volume dry-up before (10-day avg &lt; 70% of 50-day)</label>
+    <label class="tog"><input type="checkbox" data-ck="res"> No entry within 5 trading days before results</label>
+    <label class="tog"><input type="checkbox" data-ck="asm"> Skip stocks under ASM / GSM surveillance</label>
   </div>
   <div class="sub" id="hint" style="margin:0 0 12px"></div>
   <div class="tbl"><table id="t"></table></div>
@@ -134,6 +142,8 @@ const SORTS = {
   watch: [["Default", null, 1], ["Distance to trigger", r=>r.dist, 1], RS, ["Nearest 52-week high", r=>r.hi52, -1], NAME],
   exits: [["Default", null, 1], ["Exit date", r=>r.xd, -1], ["Signal date", r=>r.sd, -1], ["Result", r=>r.r, -1], NAME],
   tt: TT(true), tt7: TT(false),
+  tte: [["Default (open first, newest)", null, 1], ["Entry date", r=>r.tr&&r.tr.ed, -1], RS, ["Gain", r=>r.tr&&r.tr.g, -1], ["Max gain since entry", r=>r.tr&&r.tr.mx, -1],
+        ["Exit date", r=>r.tr&&r.tr.xd, -1], ["Nearest 52-week high", r=>r.hi, -1], ["Template checks passed now", r=>r.k, -1], ["Room above the 50-day MA", r=>r.room, 1], ["Price", r=>r.price, -1], NAME],
   t3: [["Default (newest first)", null, 1], ["Breakout date", r=>r.bd, -1], RS, ["Gain", r=>r.xd ? r.xg : r.gain, -1], ["Max gain since breakout", r=>r.mx, -1],
        ["Breakout week gain", r=>r.wk, -1], ["Touches", r=>r.touches, -1], ["Trendline length (weeks)", r=>r.span, -1], ["Strong first", r=>r.strong?1:0, -1], NAME],
   log: [["Entry date", r=>r.ed, -1], ["Exit date", r=>r.xd, -1], ["Gain", r=>r.g, -1], ["Max gain", r=>r.mx, -1], ["Days / weeks held", r=>r.days, -1], ["Entry price", r=>r.ep, -1], NAME],
@@ -147,7 +157,7 @@ function sortUI(){
   const L = SORTS[view] || [];
   sortK.innerHTML = L.map((o,i)=>`<option value="${i}">${esc(o[0])}</option>`).join("");
   const saved = (store.get("azh:sort:"+view) || "").split(",");
-  sortK.value = L[+saved[0]] ? saved[0] : "0";
+  sortK.value = saved[0] !== "" && L[+saved[0]] ? saved[0] : "0";
   sortDir = saved[1] ? +saved[1] : (L[+sortK.value]||[0,0,1])[2];
   sortD.textContent = sortDir < 0 ? "↓ high to low" : "↑ low to high";
 }
@@ -166,6 +176,22 @@ function srt(rows){
 }
 sortK.onchange = () => { sortDir = ((SORTS[view]||[])[+sortK.value]||[0,0,1])[2]; store.set("azh:sort:"+view, sortK.value+","+sortDir); sortView = null; draw(); };
 sortD.onclick = () => { sortDir = -sortDir; store.set("azh:sort:"+view, sortK.value+","+sortDir); sortView = null; draw(); };
+// ---------- Stage 2 start: extra checks, switched on the page ----------
+const ECK = ["vol","dry","res","asm"], ELAB = {vol:"breakout volume", dry:"volume dry-up", res:"no results within 5 days", asm:"no surveillance"};
+const eck = {}; ECK.forEach(k=>eck[k] = store.get("azh:eck:"+k) === "1");
+document.querySelectorAll("#ttebar [data-ck]").forEach(cb=>{ cb.checked = eck[cb.dataset.ck]; cb.onchange = () => { eck[cb.dataset.ck] = cb.checked; store.set("azh:eck:"+cb.dataset.ck, cb.checked?"1":"0"); draw(); }; });
+// f = [volume ratio, dry-up ratio, results soon, surveillance, chop]; a check that can't be measured passes
+function passE(f, c){ c = c || eck; f = f || [];
+  if (c.vol && f[0]!=null && !(f[0] >= 1.5)) return false;
+  if (c.dry && f[1]!=null && !(f[1] < 0.7)) return false;
+  if (c.res && f[2]===true) return false;
+  if (c.asm && f[3]===true) return false;
+  return true; }
+function estats(L){
+  const cl = L.filter(a=>a[3]), g = cl.map(a=>a[5]), all = L.map(a=>a[5]), w = g.filter(x=>x>0), l = g.filter(x=>x<=0), m = a => a.length ? a.reduce((s,x)=>s+x,0)/a.length : null, r1 = v => v==null ? null : Math.round(v*10)/10;
+  return {n:L.length, closed:cl.length, open:L.length-cl.length, win: cl.length ? Math.round(w.length/cl.length*100) : null, avg_win:r1(m(w)), avg_loss:r1(m(l)), avg:r1(m(g)),
+          avg_all:r1(m(all)), win_all: all.length ? Math.round(all.filter(x=>x>0).length/all.length*100) : null, big: all.length ? Math.round(L.filter(a=>a[6]>=30).length/all.length*100) : null,
+          sl_hit: cl.length ? Math.round(cl.filter(a=>a[7]==="Stop-loss").length/cl.length*100) : null, from:(D.tt&&D.tt.stats&&D.tt.stats.e||{}).from}; }
 // ---------- all past trades (loaded only when the tab is opened) ----------
 let LOG = null, logN = 300;
 const lg = id => document.getElementById(id);
@@ -192,7 +218,7 @@ function drawLog(t, hint){
   if (!LOG){
     hint.textContent = "Loading every trade of the last 2 years…"; t.innerHTML = ""; more.innerHTML = "";
     fetch("trade_log.json", {cache:"no-cache"}).then(r=>r.ok?r.json():Promise.reject()).then(j=>{ LOG = j;
-      const ys = new Set(); ["tt8","tt7","t3"].forEach(k=>(j[k]||[]).forEach(a=>ys.add(a[1].slice(0,4))));
+      const ys = new Set(); ["tt8","tt7","tte","t3"].forEach(k=>(j[k]||[]).forEach(a=>ys.add(a[1].slice(0,4))));
       lg("lg_y").innerHTML = '<option value="">All</option>' + [...ys].sort().reverse().map(y=>`<option>${y}</option>`).join("");
       if (view==="log") draw(); }).catch(()=>{ hint.textContent = "The trade list is not available yet. It appears after the next update."; });
     return;
@@ -223,7 +249,8 @@ function draw(){
   document.querySelectorAll(".tabs button").forEach(b=>b.setAttribute("aria-selected", b.dataset.v===view));
   const t = document.getElementById("t"), hint = document.getElementById("hint");
   lg("logbar").style.display = view === "log" ? "" : "none"; lg("more").innerHTML = "";
-  document.querySelectorAll("#clean,#qab,#risk").forEach(e=>e.closest("label").style.display = view==="log" ? "none" : "");
+  lg("ttebar").style.display = view === "tte" ? "" : "none";
+  document.querySelectorAll("#clean,#qab,#risk").forEach(e=>e.closest("label").style.display = view==="log" || (view==="tte" && e.id!=="risk") ? "none" : "");
   if (view==="log"){ drawLog(t, hint); return; }
   if (view==="open"){
     const rows = srt(D.open.filter(keep));
@@ -239,6 +266,27 @@ function draw(){
     hint.innerHTML = "Leaders near their highs, within 5% of the 12-week breakout level. A weekly close above both trigger levels makes it a signal.";
     t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Price</th><th>Breakout level</th><th>Distance</th><th>Weekly close needed (with +8%)</th><th>RS</th><th>From 52-wk high</th><th class="l">Notes</th></tr></thead><tbody>${rows.map(r=>`<tr>
       ${nm(r)}<td>₹${fmt(r.price)}</td><td>₹${fmt(r.trig)}</td><td>${fmt(r.dist,1)}%</td><td><b>₹${fmt(r.need8)}</b></td><td>${r.rs??"–"}</td><td>${pc(r.hi52)}</td><td class="l">${flags(r.flags)}</td></tr>`).join("") || '<tr><td colspan="8" class="mut">Nothing close to triggering.</td></tr>'}</tbody>`;
+  } else if (view==="tte"){
+    const T = D.tt || {}, b = T.breadth;
+    const rows = srt((T.early||[]).filter(r=>passE(r.tr && r.tr.fl)));
+    const L = (T.elog||[]), on = ECK.filter(k=>eck[k]).map(k=>ELAB[k]);
+    const cur = estats(L.filter(a=>passE(a.slice(9))));
+    const known = (i, f) => L.filter(a=>a[9+i]!=null).length;
+    const vk = known(0), rk = known(2), sk = known(3);
+    hint.innerHTML = statBox(cur, "Stage 2 start" + (on.length ? " with " + on.join(", ") : "")) +
+      `<details style="margin:0 0 10px"><summary style="cursor:pointer"><b>Compare the checks</b> (same 2 years of trades)</summary><div class="tbl" style="margin:8px 0 0"><table><thead><tr><th class="l">Rule</th><th>Trades</th><th>Won</th><th>Avg winner</th><th>Avg loser</th><th>Avg per closed trade</th><th>Incl. open</th><th>Reached +30%</th></tr></thead><tbody>${
+        [["Rule only", {}], ["+ breakout volume", {vol:1}], ["+ volume dry-up", {dry:1}], ["+ both volume checks", {vol:1, dry:1}], ["+ no results within 5 days", {res:1}], ["+ skip surveillance", {asm:1}], ["All four checks", {vol:1, dry:1, res:1, asm:1}]]
+        .map(([n, c])=>{ const S = estats(L.filter(a=>passE(a.slice(9), c))); const sg = v => v==null ? "–" : (v>0?"+":"")+fmt(v,1)+"%";
+          return `<tr><td class="l">${n}</td><td>${S.n}</td><td>${S.win!=null?S.win+"%":"–"}</td><td class="ok">${sg(S.avg_win)}</td><td class="bad">${sg(S.avg_loss)}</td><td><b>${sg(S.avg)}</b></td><td>${sg(S.avg_all)}</td><td>${S.big!=null?S.big+"%":"–"}</td></tr>`; }).join("")}</tbody></table></div>
+        <p class="sub" style="margin:6px 0 0">Volume known for ${vk} of ${L.length} trades. Results dates and surveillance lists are only kept from ${dl(T.hist_since)} onwards (NSE gives upcoming dates only), so those two checks cover ${rk} and ${sk} trades so far and fill in as the dashboard runs. Trades where a check can't be measured are kept.</p></details>` +
+      `Catches the turn <b>before</b> the Trend Template does (ASTRAMICRO broke out of its base on 21 Apr 2026 at ₹1,110 but reached 8/8 only on 26 Jun at ₹1,719). <b>Entry</b> = close above the highest close of the last 26 weeks, within 10% of the 52-week high, above the 50 and 200-day MAs, 50-day MA rising, RS 80+, not more than 25% above the 50-day MA, Choppiness (14 days) below 38, and only when more than half of all stocks are above their 50-day MA. <b>Exit</b>: the first daily close below the 50-day MA, with an emergency stop 12% below entry for gap-downs (tested on real prices: average per closed trade +4.1% vs +3.3% with an 8% stop and a weekly exit). Signals from the last 3 months.${T.live ? " During market hours today's volume is still partial, so the volume check is final only at the close." : ""}` +
+      `<div style="margin:8px 0 0"><b>Market breadth now: ${b??"–"}% of stocks above their 50-day MA</b> ${b!=null && b>50 ? '<span class="ok">new entries allowed</span>' : '<span class="bad">below 50%: no new entries until the market improves</span>'}</div>`;
+    const yn = (v, good) => v==null ? '<span class="mut">–</span>' : good ? `<span class="ok">${v}</span>` : `<span class="bad">${v}</span>`;
+    t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Entry</th><th>Now / exit</th><th>Gain</th><th>RS</th><th>Breakout volume</th><th>Dry-up before</th><th>Chop at entry</th><th>Template now</th><th>Emergency stop (−12%)</th><th>Exit on a daily close below (50-day MA)</th><th>Qty</th><th class="l">Notes</th></tr></thead><tbody>${rows.map(r=>{ const f = (r.tr&&r.tr.fl)||[], rs_ = (T.res_soon||{})[r.sym]; return `<tr>
+      ${nm(r)}${trCells(r)}<td><b>${r.rs??"–"}</b>${r.new?'<span class="new">new</span>':""}</td>
+      <td>${yn(f[0]!=null?fmt(f[0],1)+"×":null, f[0]>=1.5)}</td><td>${yn(f[1]!=null?Math.round(f[1]*100)+"%":null, f[1]<0.7)}</td><td>${f[4]??"–"}</td><td>${r.k}/8</td>
+      <td>${r.tr&&r.tr.open?"₹"+fmt(r.tr.sl):"–"}</td><td>${r.tr&&r.tr.open?"₹"+fmt(r.exit):"–"}</td><td>${r.tr&&r.tr.open?qty(r.price, Math.max(r.tr.sl, r.exit<r.price?r.exit:0)):"–"}</td>
+      <td class="l" style="white-space:normal;font-size:.8rem">${f[2]?'<span class="flag">results within 5 days of entry</span>':""}${f[3]?'<span class="flag">under surveillance at entry</span>':""}${rs_&&r.tr&&r.tr.open?`<span class="flag">results on ${dl(rs_)}</span>`:""}</td></tr>`; }).join("") || '<tr><td colspan="13" class="mut">No Stage 2 start signals in the last 3 months that pass the checks you picked.</td></tr>'}</tbody>`;
   } else if (view==="tt" || view==="tt7"){
     const T = D.tt || {all:[], near:[]}, rows = srt((view==="tt" ? T.all : T.near).filter(keep));
     hint.innerHTML = view==="tt" ? `Minervini's Stage 2 filter: price above the 50, 150 and 200-day MAs in that order, the 200-day rising, 30%+ above the 52-week low, within 25% of the high, RS 70+. ${rows.length} stocks pass. <b>Leader</b> = RS 90+ and within 5% of the 52-week high: in testing these did about twice as well as all passes (48% won, about +15% per trade vs +7%).`
