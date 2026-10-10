@@ -74,6 +74,7 @@ META = [
     ("tt_early", "Stage 2 start: 26-week closing-high breakout, RS 80+, above the 50 and 200-day MAs, Choppiness below 38 (early entry)", "e"),
 ]
 STOP = 0.08
+DIV_FRESH = 10     # show a divergence warning for 10 sessions after it appears
 STOP_E = 0.12      # Stage 2 start: emergency stop 12% below entry; the main exit is a daily close below the 50-day MA
 LABELS = ["Price above the 150 and 200-day MAs", "150-day MA above the 200-day MA", "200-day MA rising for 1 month+",
           "50-day MA above the 150 and 200-day MAs", "Price above the 50-day MA", "At least 30% above the 52-week low",
@@ -82,6 +83,28 @@ LABELS = ["Price above the 150 and 200-day MAs", "150-day MA above the 200-day M
 
 def _r(x, n=2):
     return None if x is None or not np.isfinite(x) else round(float(x), n)
+
+
+def _rsi_div(h, r, c, start, entry, k=3, win=60, need=60):
+    """Latest bearish RSI divergence known since the entry, while the trade was in profit.
+    Returns (signal index, earlier peak price, its RSI, later peak price, its RSI) or None."""
+    n = len(h)
+    piv, found = [], None
+    for p in range(max(k, start - win - k), n - k):
+        if not np.isfinite(h[p]) or h[p] < np.nanmax(h[p - k:p + k + 1]):
+            continue
+        if piv and p - piv[-1] <= k:
+            continue
+        sig = p + k
+        if sig >= start and np.isfinite(c[sig]) and c[sig] > entry:
+            for q in reversed(piv):
+                if p - q > win:
+                    break
+                if h[p] > h[q] and np.isfinite(r[p]) and np.isfinite(r[q]) and r[p] < r[q] and r[q] >= need:
+                    found = (sig, h[q], r[q], h[p], r[p])
+                    break
+        piv.append(p)
+    return found
 
 
 def build(px, stocks, earn=None, surv=None, live=False):
@@ -177,6 +200,7 @@ def build(px, stocks, earn=None, surv=None, live=False):
     else:
         VR = DRY = np.full((len(T), len(cols)), np.nan)
     CH = chop.to_numpy(float)
+    RSN = rs.to_numpy(float)
     today = T[-1].strftime("%Y-%m-%d")
     hist = _hist(earn, surv, today)
     res_h, asm_h = hist.get("res", {}), hist.get("asm", {})
@@ -184,7 +208,7 @@ def build(px, stocks, earn=None, surv=None, live=False):
     h_since = hist.get("since", today)
 
     def flags(sym, i, j):
-        """[volume ratio, dry-up ratio, results within 5 trading days (or None = unknown), under surveillance (None = unknown), chop]"""
+        """[volume ratio, dry-up ratio, results within 5 trading days (or None = unknown), under surveillance (None = unknown), chop, RS at entry]"""
         d = T[i]
         ds = d.strftime("%Y-%m-%d")
         rs_ = None
@@ -196,7 +220,7 @@ def build(px, stocks, earn=None, surv=None, live=False):
         if prior and (pd.Timestamp(ds) - pd.Timestamp(prior[-1])).days <= 7:
             sv = sym in asm_h[prior[-1]]
         f = lambda x, n=2: round(float(x), n) if np.isfinite(x) else None
-        return [f(VR[i, j]), f(DRY[i, j]), rs_, sv, f(CH[i, j], 0)]
+        return [f(VR[i, j]), f(DRY[i, j]), rs_, sv, f(CH[i, j], 0), f(RSN[i, j], 0)]
     # ---------- trades (dashboard rule, not part of the template) ----------
     # entry: close on the day the rule holds (template rules: a fresh pass; after an exit the count must drop first)
     # stop-loss: 8% below entry (Minervini's 7-8% max loss), hit intraday -> exit at the stop (or the open on a gap down)
@@ -302,10 +326,30 @@ def build(px, stocks, earn=None, surv=None, live=False):
     rows.sort(key=lambda x: (not x.get("lead"), -(x["rs"] or 0)))
     near.sort(key=lambda x: -(x["rs"] or 0))
     bnow = br.iloc[-1]
+    # bearish RSI divergence warning on open Stage 2 start trades: price makes a higher swing high than one up to
+    # 60 sessions earlier (that earlier peak had RSI 60+) but RSI makes a lower high; known 3 sessions after the
+    # second peak. Only flagged while the trade is in profit. Tested as an exit: 79% of trades won and the worst
+    # fall halved, but total profit was lower (big winners sold early), so it is a warning, not a rule.
+    dd_ = C.diff()
+    up_ = dd_.clip(lower=0).ewm(alpha=1 / 14, adjust=False).mean()
+    dn_ = (-dd_.clip(upper=0)).ewm(alpha=1 / 14, adjust=False).mean()
+    RSI14 = (100 - 100 / (1 + up_ / dn_.replace(0, np.nan))).to_numpy(float)
+    Hn = H.reindex(columns=cols).to_numpy(float)
+    ndiv = 0
+    for sym, tr in last_tr["e"].items():
+        if not tr.get("open"):
+            continue
+        j = col[sym + ".NS"]
+        ei = int(T.searchsorted(pd.Timestamp(tr["ed"])))
+        div = _rsi_div(Hn[:, j], RSI14[:, j], Cn[:, j], ei, tr["ep"])
+        if div and len(T) - 1 - div[0] <= DIV_FRESH:
+            tr["div"] = {"d": T[div[0]].strftime("%Y-%m-%d"), "p1": _r(div[1]), "r1": _r(div[2], 0), "p2": _r(div[3]), "r2": _r(div[4], 0),
+                         "ago": int(len(T) - 1 - div[0])}
+            ndiv += 1
     # the Stage 2 start tab works from its 2-year trade list, so the checks can be switched on the page
     elog = [x for x in log["e"]]
     for r in erows:
         r["chop"] = _r(CH[-1, col[r["sym"] + ".NS"]], 0)
     return {"all": rows, "near": near[:150], "early": erows, "elog": elog, "n_all": len(rows), "stats": stats, "log": log,
-            "breadth": _r(bnow * 100, 0) if np.isfinite(bnow) else None, "hist_since": h_since, "live": bool(live),
+            "breadth": _r(bnow * 100, 0) if np.isfinite(bnow) else None, "ndiv": ndiv, "hist_since": h_since, "live": bool(live),
             "res_soon": {k: v for k, v in (earn or {}).items() if v and (pd.Timestamp(v) - T[-1]).days <= 7 and v >= today}}, recs, sc
