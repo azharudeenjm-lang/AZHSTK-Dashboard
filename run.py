@@ -253,6 +253,12 @@ def main():
             print(f"  trade log: {len(tl['tt8'])} (8/8), {len(tl['tt7'])} (7/8), {len(tl['tte'])} (stage 2 start), {len(tl['t3'])} (3-touch) trades")
         except Exception as e:
             print(f"  ! trade log skipped: {str(e)[:120]}")
+        try:            # A-plus breakout composite (weekly); writes docs/aplus.json for its tab
+            from src import aplus
+            ap_ = aplus.build(px, stocks, BENCHMARK)
+            print(f"  A-plus breakouts: {ap_['n']} base breakouts logged, {ap_['watch']} bases on watch")
+        except Exception as e:
+            print(f"  ! A-plus breakouts skipped: {str(e)[:120]}")
         buy_page.render(clean(by_page))
         for t, r in by_sc.items():
             sg["w"].setdefault(t, {}).update(r)
