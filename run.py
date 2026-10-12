@@ -248,9 +248,9 @@ def main():
         try:            # every trade of the last 2 years, loaded by the "All past trades" tab only when opened
             ttl = (by_page.get("tt") or {}).pop("log", None) or {}
             tl = {"generated": by_page.get("generated"), "names": {x["sym"]: x["name"] for x in stocks},
-                  "tt8": ttl.get("8", []), "tt7": ttl.get("7", []), "tte": ttl.get("e", []), "t3": (by_page.get("t3") or {}).pop("log", None) or []}
+                  "tt8": ttl.get("8", []), "tt7": ttl.get("7", []), "tte": ttl.get("e", []), "by": by_page.pop("log", None) or [], "t3": (by_page.get("t3") or {}).pop("log", None) or []}
             (DOCS / "trade_log.json").write_text(json.dumps(clean(tl), separators=(",", ":")), encoding="utf-8")
-            print(f"  trade log: {len(tl['tt8'])} (8/8), {len(tl['tt7'])} (7/8), {len(tl['tte'])} (stage 2 start), {len(tl['t3'])} (3-touch) trades")
+            print(f"  trade log: {len(tl['tt8'])} (8/8), {len(tl['tt7'])} (7/8), {len(tl['tte'])} (stage 2 start), {len(tl['t3'])} (3-touch), {len(tl['by'])} (weekly momentum) trades")
         except Exception as e:
             print(f"  ! trade log skipped: {str(e)[:120]}")
         try:            # A-plus breakout composite (weekly); writes docs/aplus.json for its tab
