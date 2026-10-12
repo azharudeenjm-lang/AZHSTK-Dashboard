@@ -78,7 +78,7 @@ TEMPLATE = r"""
     <button type="button" id="sortd" class="tog sel" title="Reverse the order" style="cursor:pointer"></button>
   </div>
   <div class="tools" id="logbar" style="display:none">
-    <label class="tog">Rule <select id="lg_set" class="sel"><option value="tt8">Trend Template 8/8</option><option value="tt7">Trend Template 7/8</option><option value="tte">Stage 2 start (early)</option><option value="t3">3-touch breakouts (all)</option><option value="t3s">3-touch breakouts (strong only)</option></select></label>
+    <label class="tog">Rule <select id="lg_set" class="sel"><option value="by">Weekly momentum breakout (Buy criteria rule)</option><option value="tt8">Trend Template 8/8</option><option value="tt7">Trend Template 7/8</option><option value="tte">Stage 2 start (early)</option><option value="t3">3-touch breakouts (all)</option><option value="t3s">3-touch breakouts (strong only)</option></select></label>
     <label class="tog">Show <select id="lg_st" class="sel"><option value="">All trades</option><option value="open">Still open</option><option value="closed">Closed</option><option value="win">Closed with a profit</option><option value="loss">Closed with a loss</option></select></label>
     <label class="tog">Entry year <select id="lg_y" class="sel"><option value="">All</option></select></label>
     <label class="tog">Stock <input type="search" id="lg_q" placeholder="e.g. HFCL" style="width:110px"></label>
@@ -90,6 +90,7 @@ TEMPLATE = r"""
     <label class="tog"><input type="checkbox" data-ck="dry"> Volume dry-up before (10-day avg &lt; 70% of 50-day)</label>
     <label class="tog"><input type="checkbox" data-ck="res"> No entry within 5 trading days before results</label>
     <label class="tog"><input type="checkbox" data-ck="asm"> Skip stocks under ASM / GSM surveillance</label>
+    <label class="tog">Show <select id="tte_span" class="sel"><option value="">signals of the last 3 months (latest per stock)</option><option value="all">every trade of the last 2 years</option></select></label>
   </div>
   <div class="tools" id="apbar" style="display:none">
     <b style="font-size:.85rem">Conditions:</b>
@@ -99,7 +100,8 @@ TEMPLATE = r"""
     <label class="tog"><input type="checkbox" data-ap="cbase" checked> Choppiness 60+ in the base</label>
     <label class="tog">Choppiness on breakout week <select id="ap_chop" class="sel"><option value="50">below 50</option><option value="38.2">below 38.2 (strict)</option><option value="">any</option></select></label>
     <label class="tog">Breakout volume <select id="ap_vol" class="sel"><option value="2">≥ 2× its 20-wk average</option><option value="sd">&gt; average + 2 std dev (strict)</option><option value="">any</option></select></label>
-    <label class="tog">RS at breakout <select id="ap_rs" class="sel"><option value="">any</option><option value="70">70+</option><option value="80">80+</option></select></label>
+    <label class="tog">RS at breakout <select id="ap_rs" class="sel"><option value="">any</option><option value="70">70+</option><option value="80">80+</option><option value="90">90+</option></select></label>
+    <label class="tog">Show trades <select id="ap_span" class="sel"><option value="91">last 3 months</option><option value="">all 2 years</option></select></label>
   </div>
   <div class="sub" id="hint" style="margin:0 0 12px"></div>
   <div class="tbl"><table id="t"></table></div>
@@ -128,7 +130,10 @@ document.getElementById("stats").innerHTML = S ? `<h2>Track record of this rule<
     <div><b class="bad">${fmt(S.avg_loss,1)}%</b><small>average loser</small></div>
     <div><b class="${S.exp>=0?'ok':'bad'}">${S.exp>0?"+":""}${fmt(S.exp,1)}%</b><small>average per trade · ${S.big}% reached +50% · typical hold ${S.hold} weeks</small></div></div>
   <p class="sub" style="margin:10px 0 0">Biggest winners: ${S.best.map(b=>`<button class="psym" data-p="${esc(b.sym)}">${esc(b.sym)}</button> +${b.r}% (from ${dl(b.sd)})`).join(" · ")}. Costs are not included.</p>
-  <p class="sub" style="margin:6px 0 0">By year: ${(S.years||[]).map(y=>`${y.y}: ${y.n} trades, ${y.exp>0?"+":""}${fmt(y.exp,1)}% per trade, ${fmt(y.win,0)}% won`).join(" · ")}. Results swing a lot with the market: big in strong years, close to flat in choppy ones.</p>` : "";
+  <p class="sub" style="margin:6px 0 0">By year: ${(S.years||[]).map(y=>`${y.y}: ${y.n} trades, ${y.exp>0?"+":""}${fmt(y.exp,1)}% per trade, ${fmt(y.win,0)}% won`).join(" · ")}. Results swing a lot with the market: big in strong years, close to flat in choppy ones.</p>
+  <p class="sub" style="margin:6px 0 0"><a href="#" id="seeby" style="color:var(--focus);font-weight:600">See every trade of the last 2 years →</a></p>` : "";
+document.addEventListener("click", ev => { if (ev.target && ev.target.id === "seeby"){ ev.preventDefault();
+  document.getElementById("lg_set").value = "by"; view = "log"; logN = 300; draw(); document.querySelector(".tabs").scrollIntoView({behavior:"smooth"}); } });
 function qty(entry, sl){ const r = +riskEl.value; if (!r || !entry || !sl || entry <= sl) return "–"; const q = Math.floor(r / (entry - sl)); return `${q.toLocaleString("en-IN")} <small class="mut">(₹${Math.round(q*entry).toLocaleString("en-IN")})</small>`; }
 const flags = f => (f||[]).map(x=>`<span class="flag">${esc(x)}</span>`).join("");
 const qabEl = document.getElementById("qab"); qabEl.checked = store.get("azh:buyqab") === "1";
@@ -210,7 +215,8 @@ let AP = null, apLoading = false;
 const APK = ["obv","cmf","mrs","cbase"];
 const apc = {}; APK.forEach(k=>{ const v = store.get("azh:ap:"+k); apc[k] = v===null ? true : v==="1"; });
 document.querySelectorAll("#apbar [data-ap]").forEach(cb=>{ cb.checked = apc[cb.dataset.ap]; cb.onchange = () => { apc[cb.dataset.ap] = cb.checked; store.set("azh:ap:"+cb.dataset.ap, cb.checked?"1":"0"); draw(); }; });
-["ap_chop","ap_vol","ap_rs"].forEach(id=>{ const el = $id(id), v = store.get("azh:"+id); if (v!==null) el.value = v; el.onchange = () => { store.set("azh:"+id, el.value); draw(); }; });
+let apN = 200;
+["ap_chop","ap_vol","ap_rs","ap_span","tte_span"].forEach(id=>{ const el = $id(id), v = store.get("azh:"+id); if (v!==null) el.value = v; el.onchange = () => { store.set("azh:"+id, el.value); apN = 200; draw(); }; });
 // log row: 9 OBV ok, 10 CMF, 11 Mansfield ok, 12 chop max in base, 13 chop now, 14 volume x, 15 vol > avg+2sd, 16 turnover, 17 RS, 18 base %, 19 forming
 function apPass(a, c){
   c = c || {obv:apc.obv, cmf:apc.cmf, mrs:apc.mrs, cbase:apc.cbase, chop:$id("ap_chop").value, vol:$id("ap_vol").value, rs:$id("ap_rs").value};
@@ -234,27 +240,31 @@ function drawAP(t, hint){
   }
   const P = AP.params, L = AP.log, sel = L.filter(a=>apPass(a)), S = apStats(sel);
   const ALL = {obv:1, cmf:1, mrs:1, cbase:1, chop:"50", vol:"2", rs:""};
-  const rowsC = [["Tight base breakout only (no other condition)", {}], ["+ OBV rising", {obv:1}], ["+ CMF > 0.05", {cmf:1}], ["+ Mansfield RS rising", {mrs:1}],
-    ["+ Choppiness 60+ in base, below 50 on breakout", {cbase:1, chop:"50"}], ["+ Choppiness 60+ in base, below 38.2 (strict)", {cbase:1, chop:"38.2"}],
-    ["+ volume ≥ 2×", {vol:"2"}], ["+ volume > average + 2 std dev", {vol:"sd"}], ["A-plus (all, Choppiness < 50, volume 2×)", ALL],
-    ["A-plus strict (Choppiness < 38.2, volume + 2 std dev)", {...ALL, chop:"38.2", vol:"sd"}], ["A-plus + RS 80+", {...ALL, rs:"80"}]];
+  const rowsC = [["Tight base breakout only", {}], ["+ OBV rising", {obv:1}], ["+ CMF > 0.05", {cmf:1}], ["+ Mansfield RS rising", {mrs:1}],
+    ["+ Choppiness 60+ → below 50", {cbase:1, chop:"50"}], ["+ Choppiness 60+ → below 38.2", {cbase:1, chop:"38.2"}],
+    ["+ volume ≥ 2×", {vol:"2"}], ["+ volume > avg + 2 sd", {vol:"sd"}], ["+ RS 80+", {rs:"80"}], ["+ RS 90+", {rs:"90"}], ["+ volume 2× and RS 90+", {vol:"2", rs:"90"}],
+    ["A-plus (all, Chop < 50, vol 2×)", ALL], ["A-plus strict (Chop < 38.2, vol + 2 sd)", {...ALL, chop:"38.2", vol:"sd"}], ["A-plus + RS 80+", {...ALL, rs:"80"}]];
   const sg = v => v==null ? "–" : (v>0?"+":"")+fmt(v,1)+"%";
   hint.innerHTML = statBox({...S, from: AP.since}, "A-plus breakouts with your settings") +
-    `<details style="margin:0 0 10px"><summary style="cursor:pointer"><b>Compare the conditions</b> (every tight-base breakout of the last 2 years)</summary><div class="tbl" style="margin:8px 0 0"><table><thead><tr><th class="l">Rule</th><th>Trades</th><th>Won</th><th>Avg winner</th><th>Avg loser</th><th>Avg per closed trade</th><th>Incl. open</th><th>Reached +30%</th></tr></thead><tbody>${
+    `<details style="margin:0 0 10px"><summary style="cursor:pointer"><b>Compare the conditions</b> (every tight-base breakout of the last 2 years)</summary><div class="tbl" style="margin:8px 0 0"><table style="font-size:.85rem"><thead><tr><th class="l">Rule</th><th>Trades</th><th>Won</th><th>Avg win</th><th>Avg loss</th><th>Per closed trade</th><th>Incl. open</th><th>Hit +30%</th></tr></thead><tbody>${
       rowsC.map(([n, c])=>{ const X = estats(L.filter(a=>apPass(a, c))); return `<tr><td class="l">${n}</td><td>${X.n}</td><td>${X.win!=null?X.win+"%":"–"}</td><td class="ok">${sg(X.avg_win)}</td><td class="bad">${sg(X.avg_loss)}</td><td><b>${sg(X.avg)}</b></td><td>${sg(X.avg_all)}</td><td>${X.big!=null?X.big+"%":"–"}</td></tr>`; }).join("")}</tbody></table></div></details>` +
     `Weekly setup: a ${P.base_w}-week base whose range is under ${P.tight}% of its low, quietly accumulated (OBV above its rising 10-week average, CMF above ${P.cmf}, Mansfield RS vs NIFTY positive and rising, Choppiness 60+ = a real sideways range), then a weekly close above the base high on volume at least ${P.vol_x}× normal with Choppiness falling. Liquidity: at least ₹${P.turn} crore traded a week. Ranked by RS. <b>Exit</b>: first daily close below the 50-day MA, emergency stop ${P.stop}% below entry.${AP.has_volume ? "" : " <b>Volume data is missing, so the volume, OBV and CMF conditions can't be checked yet.</b>"}`;
-  const cut = new Date(Date.now() - 91*864e5).toISOString().slice(0,10);
+  const span = $id("ap_span").value, cut = span ? new Date(Date.now() - (+span)*864e5).toISOString().slice(0,10) : "";
   let rows = sel.filter(a=>a[1] >= cut).map(a=>({sym:a[0], name:AP.names[a[0]], sector:(AP.sectors||{})[a[0]], a, ed:a[1], g:a[5], mx:a[6], rs:a[17], open:!a[3]}));
   rows = srt(rows);
+  const total = rows.length; rows = rows.slice(0, apN);
+  const more = $id("more");
+  more.innerHTML = total > apN ? `<button type="button" class="sel" style="cursor:pointer" id="ap_more">Show ${Math.min(300, total-apN)} more (${total-apN} hidden)</button>` : "";
+  if ($id("ap_more")) $id("ap_more").onclick = () => { apN += 300; draw(); };
   const W = AP.watch.filter(w=>(!apc.obv || w.obv) && (!apc.mrs || w.mrs) && (!apc.cmf || w.cmf > 0.05) && (!apc.cbase || w.chopmax >= 60));
   const yes = (v, txt) => v ? `<span class="ok">${txt||"✓"}</span>` : `<span class="bad">${txt||"✗"}</span>`;
-  t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Breakout week</th><th>Entry</th><th>Now / exit</th><th>Gain</th><th>RS</th><th>Volume</th><th>CMF</th><th>OBV</th><th>Mansfield</th><th>Choppiness base → week</th><th>Base range</th><th>Emergency stop</th><th>Qty</th></tr></thead><tbody>${rows.map(r=>{ const a = r.a; return `<tr>
+  t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Breakout week</th><th>Entry</th><th>Now / exit</th><th>Gain</th><th>RS</th><th>Volume</th><th>CMF</th><th>OBV</th><th>Mansfield</th><th>Choppiness base → week</th><th>Base range</th><th>Emergency stop</th><th>Qty</th></tr></thead><tbody><tr><td colspan="14" class="l"><b>${total} trade${total===1?"":"s"}</b> <span class="mut">${span ? "from the last 3 months" : "from the last 2 years"} with your settings${total>apN?`, showing ${apN}`:""}</span></td></tr>${rows.map(r=>{ const a = r.a; return `<tr>
     ${nm(r)}<td>${dl(a[1])}${a[19]?'<span class="new form">forming</span>':""}</td><td>₹${fmt(a[2])}</td>
     <td>₹${fmt(a[4])}${a[3]?`<small class="bad" style="display:block">exited ${dl(a[3])} · ${esc(a[7]||"")}</small>`:'<small class="mut" style="display:block">now</small>'}</td>
     <td>${pc(a[5])}<small class="mut" style="display:block">max ${a[6]>0?"+":""}${fmt(a[6],1)}%</small></td><td><b>${a[17]??"–"}</b></td>
     <td>${a[14]!=null?yes(a[14]>=2, fmt(a[14],1)+"×"):"–"}${a[15]?'<small class="ok" style="display:block">+2 sd</small>':""}</td><td>${a[10]!=null?yes(a[10]>0.05, fmt(a[10],2)):"–"}</td>
     <td>${yes(a[9])}</td><td>${yes(a[11])}</td><td>${a[12]??"–"} → ${a[13]??"–"}</td><td>${a[18]??"–"}%</td>
-    <td>${a[3]?"–":"₹"+fmt(a[2]*(1-P.stop/100))}</td><td>${a[3]?"–":qty(a[4], a[2]*(1-P.stop/100))}</td></tr>`; }).join("") || '<tr><td colspan="14" class="mut">No A-plus breakouts with these settings in the last 3 months.</td></tr>'}</tbody>
+    <td>${a[3]?"–":"₹"+fmt(a[2]*(1-P.stop/100))}</td><td>${a[3]?"–":qty(a[4], a[2]*(1-P.stop/100))}</td></tr>`; }).join("") || '<tr><td colspan="14" class="mut">No A-plus breakouts with these settings in this period.</td></tr>'}</tbody>
     <tbody><tr><td colspan="14" class="l" style="padding-top:18px"><b>Watch list: bases forming now</b> <span class="mut">(tight ${P.base_w}-week base, price within 5% of the base high, conditions you ticked already met; a weekly close above the trigger on heavy volume makes it a breakout)</span></td></tr>
     ${W.slice(0,60).map(w=>`<tr>${nm(w)}<td colspan="2">Trigger <b>₹${fmt(w.trig)}</b> <span class="mut">(${fmt(w.dist,1)}% away)</span></td><td>₹${fmt(w.price)}</td><td></td><td><b>${w.rs??"–"}</b></td><td></td><td>${w.cmf!=null?yes(w.cmf>0.05, fmt(w.cmf,2)):"–"}</td><td>${yes(w.obv)}</td><td>${yes(w.mrs)}</td><td>${w.chopmax??"–"} → ${w.chop??"–"}</td><td>${w.tight}%</td><td colspan="2"></td></tr>`).join("") || '<tr><td colspan="14" class="mut">No bases close to breaking out with these conditions.</td></tr>'}</tbody>`;
 }
@@ -284,12 +294,12 @@ function drawLog(t, hint){
   if (!LOG){
     hint.textContent = "Loading every trade of the last 2 years…"; t.innerHTML = ""; more.innerHTML = "";
     fetch("trade_log.json", {cache:"no-cache"}).then(r=>r.ok?r.json():Promise.reject()).then(j=>{ LOG = j;
-      const ys = new Set(); ["tt8","tt7","tte","t3"].forEach(k=>(j[k]||[]).forEach(a=>ys.add(a[1].slice(0,4))));
+      const ys = new Set(); ["by","tt8","tt7","tte","t3"].forEach(k=>(j[k]||[]).forEach(a=>ys.add(a[1].slice(0,4))));
       lg("lg_y").innerHTML = '<option value="">All</option>' + [...ys].sort().reverse().map(y=>`<option>${y}</option>`).join("");
       if (view==="log") draw(); }).catch(()=>{ hint.textContent = "The trade list is not available yet. It appears after the next update."; });
     return;
   }
-  const rows = srt(logRows()), weekly = lg("lg_set").value.startsWith("t3");
+  const rows = srt(logRows()), weekly = lg("lg_set").value.startsWith("t3") || lg("lg_set").value === "by";
   const cl = rows.filter(r=>r.xd), w = cl.filter(r=>r.g>0), avg = a => a.length ? a.reduce((s,r)=>s+r.g,0)/a.length : null;
   const sg = v => v==null ? "–" : (v>0?"+":"")+fmt(v,1)+"%";
   hint.innerHTML = `<div class="kpi" style="margin:0 0 10px"><div><b>${rows.length.toLocaleString("en-IN")}</b><small>trades shown (${rows.length-cl.length} still open)</small></div>
@@ -317,6 +327,7 @@ function draw(){
   lg("logbar").style.display = view === "log" ? "" : "none"; lg("more").innerHTML = "";
   lg("ttebar").style.display = view === "tte" ? "" : "none";
   lg("apbar").style.display = view === "ap" ? "" : "none";
+  hint.style.maxWidth = (view === "ap" || view === "tte") ? "none" : "";
   document.querySelectorAll("#clean,#qab,#risk").forEach(e=>e.closest("label").style.display = view==="log" || ((view==="tte" || view==="ap") && e.id!=="risk") ? "none" : "");
   if (view==="log"){ drawLog(t, hint); return; }
   if (view==="ap"){ drawAP(t, hint); return; }
@@ -336,7 +347,17 @@ function draw(){
       ${nm(r)}<td>₹${fmt(r.price)}</td><td>₹${fmt(r.trig)}</td><td>${fmt(r.dist,1)}%</td><td><b>₹${fmt(r.need8)}</b></td><td>${r.rs??"–"}</td><td>${pc(r.hi52)}</td><td class="l">${flags(r.flags)}</td></tr>`).join("") || '<tr><td colspan="8" class="mut">Nothing close to triggering.</td></tr>'}</tbody>`;
   } else if (view==="tte"){
     const T = D.tt || {}, b = T.breadth;
-    const rows = srt((T.early||[]).filter(r=>passE(r.tr && r.tr.fl))), nd = rows.filter(r=>r.tr&&r.tr.open&&r.tr.div).length;
+    const allMode = $id("tte_span").value === "all";
+    const curM = {}; (T.early||[]).forEach(r=>{ if (r.tr) curM[r.sym+"|"+r.tr.ed] = r; });
+    const src = allMode ? (T.elog||[]).map(a=>{ const c = curM[a[0]+"|"+a[1]], nmS = (T.enames||{})[a[0]]||[];
+        return c || {sym:a[0], name:nmS[0], sector:nmS[1], price:a[4], rs:null, k:"–", exit:null,
+                     tr:{ed:a[1], ep:a[2], xd:a[3], xp:a[3]?a[4]:null, g:a[5], mx:a[6], why:a[7], open:!a[3], sl:a[2]*0.88, fl:a.slice(9)}}; }) : (T.early||[]);
+    let rows = srt(src.filter(r=>passE(r.tr && r.tr.fl)));
+    const nd = rows.filter(r=>r.tr&&r.tr.open&&r.tr.div).length, total = rows.length;
+    rows = rows.slice(0, apN);
+    const moreEl = $id("more");
+    moreEl.innerHTML = total > apN ? `<button type="button" class="sel" style="cursor:pointer" id="tte_more">Show ${Math.min(300, total-apN)} more (${total-apN} hidden)</button>` : "";
+    if ($id("tte_more")) $id("tte_more").onclick = () => { apN += 300; draw(); };
     const L = (T.elog||[]), on = ECK.filter(k=>eck[k]).map(k=>ELAB[k]);
     const cur = estats(L.filter(a=>passE(a.slice(9))));
     const known = (i, f) => L.filter(a=>a[9+i]!=null).length;
@@ -350,10 +371,10 @@ function draw(){
       `Catches the turn <b>before</b> the Trend Template does (ASTRAMICRO broke out of its base on 21 Apr 2026 at ₹1,110 but reached 8/8 only on 26 Jun at ₹1,719). <b>Entry</b> = close above the highest close of the last 26 weeks, within 10% of the 52-week high, above the 50 and 200-day MAs, 50-day MA rising, RS 80+, not more than 25% above the 50-day MA, Choppiness (14 days) below 38, and only when more than half of all stocks are above their 50-day MA. <b>Exit</b>: the first daily close below the 50-day MA, with an emergency stop 12% below entry for gap-downs (tested on real prices: average per closed trade +4.1% vs +3.3% with an 8% stop and a weekly exit). Signals from the last 3 months.${nd ? ` <b>${nd} open trade${nd>1?"s show":" shows"} a bearish RSI divergence in the last 10 sessions</b> (⚠ in Notes): price made a higher high but RSI a lower one, an early sign the move is tiring. Tested as an exit it won 79% of trades and halved the worst fall, but earned less because it sells big winners early, so it is a warning for you to judge (hold, sell half or tighten the stop), not part of the rule.` : ""}${T.live ? " During market hours today's volume is still partial, so the volume check is final only at the close." : ""}` +
       `<div style="margin:8px 0 0"><b>Market breadth now: ${b??"–"}% of stocks above their 50-day MA</b> ${b!=null && b>50 ? '<span class="ok">new entries allowed</span>' : '<span class="bad">below 50%: no new entries until the market improves</span>'}</div>`;
     const yn = (v, good) => v==null ? '<span class="mut">–</span>' : good ? `<span class="ok">${v}</span>` : `<span class="bad">${v}</span>`;
-    t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Entry</th><th>Now / exit</th><th>Gain</th><th>RS at entry</th><th>Breakout volume</th><th>Dry-up before</th><th>Chop at entry</th><th>Template now</th><th>Emergency stop (−12%)</th><th>Exit on a daily close below (50-day MA)</th><th>Qty</th><th class="l">Notes</th></tr></thead><tbody>${rows.map(r=>{ const f = (r.tr&&r.tr.fl)||[], rs_ = (T.res_soon||{})[r.sym]; return `<tr>
+    t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Entry</th><th>Now / exit</th><th>Gain</th><th>RS at entry</th><th>Breakout volume</th><th>Dry-up before</th><th>Chop at entry</th><th>Template now</th><th>Emergency stop (−12%)</th><th>Exit on a daily close below (50-day MA)</th><th>Qty</th><th class="l">Notes</th></tr></thead><tbody><tr><td colspan="13" class="l"><b>${total} trade${total===1?"":"s"}</b> <span class="mut">${allMode ? "in the last 2 years (every entry and exit)" : "with signals in the last 3 months (each stock's latest trade)"}${total>apN?`, showing ${apN}`:""}.</span></td></tr>${rows.map(r=>{ const f = (r.tr&&r.tr.fl)||[], rs_ = (T.res_soon||{})[r.sym]; return `<tr>
       ${nm(r)}${trCells(r)}<td><b>${f[5]??"–"}</b>${r.new?'<span class="new">new</span>':""}<small class="mut" style="display:block">now ${r.rs??"–"}</small></td>
       <td>${yn(f[0]!=null?fmt(f[0],1)+"×":null, f[0]>=1.5)}</td><td>${yn(f[1]!=null?Math.round(f[1]*100)+"%":null, f[1]<0.7)}</td><td>${f[4]??"–"}</td><td>${r.k}/8</td>
-      <td>${r.tr&&r.tr.open?"₹"+fmt(r.tr.sl):"–"}</td><td>${r.tr&&r.tr.open?"₹"+fmt(r.exit):"–"}</td><td>${r.tr&&r.tr.open?qty(r.price, Math.max(r.tr.sl, r.exit<r.price?r.exit:0)):"–"}</td>
+      <td>${r.tr&&r.tr.open?"₹"+fmt(r.tr.sl):"–"}</td><td>${r.tr&&r.tr.open&&r.exit!=null?"₹"+fmt(r.exit):"–"}</td><td>${r.tr&&r.tr.open?qty(r.price, Math.max(r.tr.sl, r.exit!=null&&r.exit<r.price?r.exit:0)):"–"}</td>
       <td class="l" style="white-space:normal;font-size:.8rem">${r.tr&&r.tr.div?`<span class="flag" style="background:#fdecc8;color:#8a5a00" title="Price made a higher high (₹${fmt(r.tr.div.p2)} vs ₹${fmt(r.tr.div.p1)}) but RSI made a lower high (${r.tr.div.r2} vs ${r.tr.div.r1}). Consider selling, selling half or tightening the stop.">⚠ Bearish RSI divergence ${dl(r.tr.div.d)}: price ₹${fmt(r.tr.div.p2)} &gt; ₹${fmt(r.tr.div.p1)}, RSI ${r.tr.div.r2} &lt; ${r.tr.div.r1}</span>`:""}${f[2]?'<span class="flag">results within 5 days of entry</span>':""}${f[3]?'<span class="flag">under surveillance at entry</span>':""}${rs_&&r.tr&&r.tr.open?`<span class="flag">results on ${dl(rs_)}</span>`:""}</td></tr>`; }).join("") || '<tr><td colspan="13" class="mut">No Stage 2 start signals in the last 3 months that pass the checks you picked.</td></tr>'}</tbody>`;
   } else if (view==="tt" || view==="tt7"){
     const T = D.tt || {all:[], near:[]}, rows = srt((view==="tt" ? T.all : T.near).filter(keep));

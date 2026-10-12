@@ -350,6 +350,7 @@ def build(px, stocks, earn=None, surv=None, live=False):
     elog = [x for x in log["e"]]
     for r in erows:
         r["chop"] = _r(CH[-1, col[r["sym"] + ".NS"]], 0)
-    return {"all": rows, "near": near[:150], "early": erows, "elog": elog, "n_all": len(rows), "stats": stats, "log": log,
+    enames = {x[0]: [info[x[0]]["name"], info[x[0]].get("sector")] for x in elog if x[0] in info}
+    return {"all": rows, "near": near[:150], "early": erows, "elog": elog, "enames": enames, "n_all": len(rows), "stats": stats, "log": log,
             "breadth": _r(bnow * 100, 0) if np.isfinite(bnow) else None, "ndiv": ndiv, "hist_since": h_since, "live": bool(live),
             "res_soon": {k: v for k, v in (earn or {}).items() if v and (pd.Timestamp(v) - T[-1]).days <= 7 and v >= today}}, recs, sc

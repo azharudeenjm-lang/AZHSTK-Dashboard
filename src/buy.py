@@ -62,6 +62,7 @@ def build(px, stocks, facts=None, earn=None, today=None):
 
     # ---------- walk every stock through its whole history (for the track record) ----------
     trades_all, open_now, exits_recent, watch, recs, sc = [], [], [], [], {}, {}
+    open_all = []
     start_show = n - SHOW_WEEKS
     for j, t in enumerate(cols):
         sym = t[:-3]
@@ -78,7 +79,8 @@ def build(px, stocks, facts=None, earn=None, today=None):
             trail = max(inside["sl"], ss[i] if np.isfinite(ss[i]) else -1)
             if cc[i] < trail:
                 tr = {"sym": sym, "i": inside["i"], "x": i, "e": inside["e"], "xp": cc[i], "r": cc[i] / inside["e"] - 1,
-                      "mx": inside["mx"] / inside["e"] - 1}
+                      "mx": inside["mx"] / inside["e"] - 1,
+                      "why": "Stop-loss (breakout-week low)" if trail <= inside["sl"] else "Weekly close below 10-week average"}
                 trades_all.append(tr)
                 if i >= n - 9:
                     exits_recent.append(tr)
@@ -86,6 +88,9 @@ def build(px, stocks, facts=None, earn=None, today=None):
                 if gg[i]:          # a fresh signal on the exit bar starts a new trade
                     inside = {"i": i, "e": cc[i], "sl": ll[i], "mx": cc[i]}
         last = cc[-1] if n else np.nan
+        if inside is not None and np.isfinite(last):
+            open_all.append({"sym": sym, "i": inside["i"], "e": inside["e"], "xp": last, "r": last / inside["e"] - 1,
+                             "mx": max(inside["mx"], last) / inside["e"] - 1})
         f = facts.get(sym, {})
         flags = []
         if f.get("asm"):
@@ -154,7 +159,14 @@ def build(px, stocks, facts=None, earn=None, today=None):
     exits = sorted([{"sym": x["sym"], "name": info[x["sym"]]["name"], "sd": ds[x["i"]], "xd": ds[x["x"]],
                      "entry": _f(x["e"]), "exit": _f(x["xp"]), "r": _f(x["r"] * 100, 1)} for x in exits_recent],
                    key=lambda x: x["xd"], reverse=True)
+    # every trade of the last 2 years for the "All past trades" tab:
+    # sym, signal week, entry, exit week, exit (or price now), gain, max gain, reason, weeks held
+    since = (today - pd.Timedelta(days=730)).strftime("%Y-%m-%d")
+    log = [[x["sym"], ds[x["i"]], _f(x["e"]), ds[x["x"]], _f(x["xp"]), _f(x["r"] * 100, 1), _f(x["mx"] * 100, 1), x["why"], int(x["x"] - x["i"])]
+           for x in trades_all if ds[x["i"]] >= since]
+    log += [[x["sym"], ds[x["i"]], _f(x["e"]), None, _f(x["xp"]), _f(x["r"] * 100, 1), _f(x["mx"] * 100, 1), None, int(n - 1 - x["i"])]
+            for x in open_all if ds[x["i"]] >= since]
     page = {"open": open_now, "watch": watch[:60], "exits": exits[:40], "stats": stats, "forming": forming,
-            "week": ds[-1] if ds else None}
+            "week": ds[-1] if ds else None, "log": log}
     frames = {"c": c, "l": l, "sma": sma, "sig": sig, "rs": rs, "forming": forming}
     return page, recs, sc, frames
