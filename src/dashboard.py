@@ -94,6 +94,13 @@ label.tog{font-size:.85rem;color:var(--muted);display:flex;gap:6px;align-items:c
 .kpis{display:flex;flex-wrap:wrap;gap:6px 20px;font-size:.86rem;color:var(--muted);margin-bottom:12px}
 .kpis b{color:var(--ink);font-weight:600}
 .lk{white-space:nowrap}
+.idxrow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:10px 0 0;font-size:.85rem}
+.idxgrp h3{font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:14px 0 0;font-weight:600}
+a.ix{display:inline-block;padding:5px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);text-decoration:none;font-size:.82rem;white-space:nowrap}
+a.ix:hover{border-color:var(--ink)}
+a.ix.bk{border-style:dashed}
+td.lk a.ix{padding:2px 7px;font-size:.74rem}
+.mut{color:var(--muted)}
 button.tv{background:transparent;font-family:inherit;line-height:inherit;cursor:pointer}
 .tv{font-size:.72rem;font-weight:600;color:var(--focus,var(--impr));text-decoration:none;border:1px solid currentColor;border-radius:6px;padding:0 5px;margin-left:6px;vertical-align:1px}
 .tv:hover{background:color-mix(in srgb,currentColor 12%,transparent)}
@@ -143,6 +150,7 @@ button.tv{background:transparent;font-family:inherit;line-height:inherit;cursor:
     </div>
   </div>
   <div class="kpis" id="kpis"></div>
+  <div class="idxrow" id="det-charts"></div>
   <div class="grid two">
     <div>
       <h2 style="font-size:1rem">Stocks vs their sector</h2>
@@ -163,6 +171,12 @@ button.tv{background:transparent;font-family:inherit;line-height:inherit;cursor:
   </div>
   <div class="tbl"><table id="t-stk"></table></div>
   <button class="more" id="more" hidden>Show all</button>
+</section>
+
+<section class="panel" aria-labelledby="h-idx">
+  <h2 id="h-idx">Index charts on TradingView</h2>
+  <p class="sub">Opens the official NSE index chart (daily or weekly, following the Daily / Weekly switch above). Sectors without an NSE index on TradingView get a basket chart instead, in the sector table and the sector panel.</p>
+  <div id="idxlinks"></div>
 </section>
 
 <section class="panel" aria-labelledby="h-mov">
@@ -191,6 +205,46 @@ const tv = (sym, iv) => "https://www.tradingview.com/chart/?symbol=" + encodeURI
 const scr = sym => "https://www.screener.in/company/" + encodeURIComponent(sym) + "/";
 const tvLink = (sym, iv) => `<span class="lk"><a class="tv" href="${tv(sym, iv)}" target="_blank" rel="noopener" aria-label="Open ${esc(sym)} chart on TradingView" onclick="event.stopPropagation()">Chart</a><a class="tv" href="${scr(sym)}" target="_blank" rel="noopener" aria-label="Open ${esc(sym)} on Screener" onclick="event.stopPropagation()">Screener</a></span>`;
 const chip = q => q ? `<span class="chip q-${q}">${q}</span>` : "–";
+/* ---------- TradingView index charts ----------
+   Official NSE indices on TradingView (symbols checked against TradingView's own index pages).
+   A sector without one gets a basket: its 10 most traded liquid stocks, equal weight, = 100 today. */
+const IDX = {
+  broad: [["NIFTY","Nifty 50"],["NIFTYJR","Nifty Next 50"],["CNX200","Nifty 200"],["CNX500","Nifty 500"],["NIFTYMIDCAP50","Midcap 50"],["CNXMIDCAP","Midcap 100"],
+          ["NIFTYMIDCAP150","Midcap 150"],["NIFTY_MID_SELECT","Midcap Select"],["CNXSMALLCAP","Smallcap 100"],["NIFTYSMLCAP250","Smallcap 250"],["NIFTY_MICROCAP250","Microcap 250"],["INDIAVIX","India VIX"]],
+  sector: [["BANKNIFTY","Bank"],["NIFTYPVTBANK","Private Bank"],["CNXPSUBANK","PSU Bank"],["CNXFINANCE","Financial Services"],["NIFTYFINSRV25_50","Fin Services 25/50"],["NIFTY_CAPITAL_MKT","Capital Markets"],
+           ["CNXIT","IT"],["CNXPHARMA","Pharma"],["NIFTY_HEALTHCARE","Healthcare"],["CNXFMCG","FMCG"],["CNXCONSUMPTION","Consumption"],["NIFTY_CONSR_DURBL","Consumer Durables"],
+           ["CNXAUTO","Auto"],["CNXMETAL","Metal"],["CNXENERGY","Energy"],["NIFTY_OIL_AND_GAS","Oil & Gas"],["CNXINFRA","Infrastructure"],["NIFTY_IND_DEFENCE","India Defence"],["CNXREALTY","Realty"],["CNXMEDIA","Media"]]
+};
+// dashboard sector -> NSE indices on TradingView (first one is the closest match)
+const SEC_IDX = {
+  "Information Technology":[["CNXIT","Nifty IT"]], "Financial Services":[["CNXFINANCE","Nifty Fin Services"],["BANKNIFTY","Bank Nifty"],["NIFTYPVTBANK","Private Bank"],["CNXPSUBANK","PSU Bank"],["NIFTY_CAPITAL_MKT","Capital Markets"]],
+  "Healthcare":[["NIFTY_HEALTHCARE","Nifty Healthcare"],["CNXPHARMA","Nifty Pharma"]], "Fast Moving Consumer Goods":[["CNXFMCG","Nifty FMCG"]],
+  "Automobile and Auto Components":[["CNXAUTO","Nifty Auto"]], "Metals & Mining":[["CNXMETAL","Nifty Metal"]], "Realty":[["CNXREALTY","Nifty Realty"]],
+  "Media Entertainment & Publication":[["CNXMEDIA","Nifty Media"]], "Oil Gas & Consumable Fuels":[["NIFTY_OIL_AND_GAS","Nifty Oil & Gas"],["CNXENERGY","Nifty Energy"]],
+  "Power":[["CNXENERGY","Nifty Energy (closest)"]], "Consumer Durables":[["NIFTY_CONSR_DURBL","Nifty Consumer Durables"]],
+  "Construction":[["CNXINFRA","Nifty Infra (closest)"]], "Capital Goods":[["NIFTY_IND_DEFENCE","India Defence (part of it)"]],
+  "Consumer Services":[["CNXCONSUMPTION","Nifty Consumption (closest)"]]
+};
+const tvIdx = (sym, iv) => "https://www.tradingview.com/chart/?symbol=" + encodeURIComponent("NSE:" + sym) + "&interval=" + (iv || "D");
+function basket(sec, n=10){
+  const L = (bySec[sec]||[]).filter(s=>s.liquid && s.price>0).sort((a,b)=>(b.turnover||0)-(a.turnover||0)).slice(0, n);
+  if (L.length < 3) return null;
+  const parts = L.map(s=>`NSE:${s.sym.replace(/[&-]/g,"_")}/${(+s.price).toFixed(2)}`);
+  return {n: L.length, syms: L.map(s=>s.sym), url: "https://www.tradingview.com/chart/?symbol=" + encodeURIComponent(`(${parts.join("+")})*100/${L.length}`)};
+}
+function secChartLinks(sec, compact){
+  const iv = tf==="w" ? "W" : "D", out = [];
+  // in the table, only an exact index counts; approximate ones ("closest", "part of it") show the basket instead
+  (SEC_IDX[sec]||[]).forEach(([sym,label],k)=>{ if (!compact || (k===0 && !/closest|part of/.test(label))) out.push(`<a class="ix" href="${tvIdx(sym, iv)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="NSE:${sym} on TradingView">${esc(compact?"Index":label)}</a>`); });
+  const b = basket(sec);
+  if (b && (!compact || !out.length)) out.push(`<a class="ix bk" href="${b.url}&interval=${iv}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Equal-weight basket of ${esc(b.syms.join(", "))}">${compact?"Basket":`Basket of top ${b.n} stocks`}</a>`);
+  return out.join("");
+}
+function renderIdxLinks(){
+  const iv = tf==="w" ? "W" : "D";
+  const grp = (t, L) => `<div class="idxgrp"><h3>${t}</h3><div class="idxrow">${L.map(([s,l])=>`<a class="ix" href="${tvIdx(s, iv)}" target="_blank" rel="noopener" title="NSE:${s}">${esc(l)}</a>`).join("")}</div></div>`;
+  document.getElementById("idxlinks").innerHTML = grp("Broad market", IDX.broad) + grp("Sectoral", IDX.sector);
+}
 
 let picked = false, tf = "d", view = "tech", cur = null, showAll = false, tailLen = 3; const hiddenQ = new Set();
 let secSort = {k:"r1d",dir:-1}, stkSort = {k:"r1d",dir:-1};
@@ -285,13 +339,13 @@ function renderSectorRRG(){
   const items = D.sectors.filter(s=>s["rrg_"+tf]).map(s=>({key:s.sector,label:short(s.sector),tail:s["rrg_"+tf],q:s["q_"+tf]}));
   drawRRG(document.getElementById("rrg-sec"), items, {sel:picked?cur:null, tailLen, onPick:openSector});
 }
-const SCOLS = [["sector","Sector"],["q","Quadrant"],["r1d","1D %"],["r1w","1W %"],["r1m","1M %"],["r3m","3M %"],["above50","Breadth"],["ad","Adv / Dec"],["count","Stocks"]];
+const SCOLS = [["sector","Sector"],["q","Quadrant"],["r1d","1D %"],["r1w","1W %"],["r1m","1M %"],["r3m","3M %"],["above50","Breadth"],["ad","Adv / Dec"],["count","Stocks"],["chart","Chart"]];
 function renderSectorTable(){
   const rows = D.sectors.map(s=>({...s,q:s["q_"+tf],ad:s.adv-s.dec}));
   sortRows(rows, secSort);
   const t = document.getElementById("t-sec");
   t.innerHTML = `<thead><tr>${SCOLS.map(([k,l])=>`<th data-k="${k}" ${secSort.k===k?`aria-sort="${secSort.dir>0?'ascending':'descending'}"`:''}>${l}</th>`).join("")}</tr></thead><tbody>${
-    rows.map(s=>`<tr data-s="${esc(s.sector)}" tabindex="0" class="${s.sector===cur?'on':''}"><td>${esc(short(s.sector))}</td><td>${chip(s.q)}</td>${sign(s.r1d,2)}${sign(s.r1w)}${sign(s.r1m)}${sign(s.r3m)}<td>${s.above50==null?'–':s.above50+'%'}</td><td><span class="up">${s.adv}</span> / <span class="down">${s.dec}</span></td><td>${s.count}</td></tr>`).join("")}</tbody>`;
+    rows.map(s=>`<tr data-s="${esc(s.sector)}" tabindex="0" class="${s.sector===cur?'on':''}"><td>${esc(short(s.sector))}</td><td>${chip(s.q)}</td>${sign(s.r1d,2)}${sign(s.r1w)}${sign(s.r1m)}${sign(s.r3m)}<td>${s.above50==null?'–':s.above50+'%'}</td><td><span class="up">${s.adv}</span> / <span class="down">${s.dec}</span></td><td>${s.count}</td><td class="lk">${secChartLinks(s.sector, true) || "–"}</td></tr>`).join("")}</tbody>`;
   bindTable(t, secSort, renderSectorTable, tr=>openSector(tr.dataset.s));
 }
 
@@ -306,6 +360,8 @@ function openSector(sec, focusSym, auto){
   document.getElementById("pick").value = sec;
   document.getElementById("det-sub").textContent = s["q_"+tf] ? `${s["q_"+tf]} on the ${tf==="d"?"daily":"weekly"} RRG` : "Too few liquid stocks for a sector RRG";
   document.getElementById("kpis").innerHTML = [["Stocks",s.count],["Liquid",s.liquid],["Above 50DMA",s.above50==null?"–":s.above50+"%"],["Above 200DMA",s.above200==null?"–":s.above200+"%"],["RSI",fmt(s.rsi)],["1M",s.r1m==null?"–":fmt(s.r1m)+"%"]].map(([k,v])=>`<span>${k} <b>${v??"–"}</b></span>`).join("");
+  const cl = secChartLinks(sec, false);
+  document.getElementById("det-charts").innerHTML = cl ? `<span class="mut">Charts on TradingView:</span> ${cl}` : "";
   const news = (D.news||{})[sec]||[];
   document.getElementById("news").innerHTML = news.length ? news.map(n=>`<li><a href="${esc(n.u)}" target="_blank" rel="noopener">${esc(n.t)}</a><span>${esc(n.s)} ${esc(n.d)}</span></li>`).join("") : `<li class="empty">No headlines found for this sector this week.</li>`;
   renderStocks(focusSym); renderSectorRRG(); renderSectorTable();
@@ -354,7 +410,8 @@ function bindTable(t, st, redraw, onRow){
     tr.addEventListener("keydown",e=>{ if(e.key==="Enter"){ onRow(tr);} }); });
 }
 document.querySelectorAll("[data-tf]").forEach(bn=>bn.addEventListener("click",()=>{
-  tf = bn.dataset.tf; document.querySelectorAll("[data-tf]").forEach(x=>x.setAttribute("aria-pressed",x===bn)); openSector(cur, selStock, !picked); }));
+  tf = bn.dataset.tf; document.querySelectorAll("[data-tf]").forEach(x=>x.setAttribute("aria-pressed",x===bn)); openSector(cur, selStock, !picked); renderIdxLinks(); }));
+renderIdxLinks();
 document.querySelectorAll("[data-view]").forEach(bn=>bn.addEventListener("click",()=>{
   view = bn.dataset.view; document.querySelectorAll("[data-view]").forEach(x=>x.setAttribute("aria-pressed",x===bn));
   stkSort = view==="fund" ? {k:"mcap_cr",dir:-1} : {k:"r1d",dir:-1}; renderStocks(); }));
