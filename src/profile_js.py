@@ -802,40 +802,47 @@ document.addEventListener("keydown", e => {
 });
 mountSearch();
 mountRegime();
-(function addScreenerLink(){
-  const nav = document.querySelector("header nav"); if (!nav || nav.querySelector('a[href="screener.html"]')) return;
-  const a = document.createElement("a"); a.href = "screener.html"; a.textContent = "Screener";
-  if (getComputedStyle(nav).display) a.style.cssText = nav.querySelector("a") ? nav.querySelector("a").style.cssText : "";
-  const after = nav.querySelector('a[href="setups.html"]') || nav.lastElementChild;
-  after ? after.insertAdjacentElement("afterend", a) : nav.appendChild(a);
-})();
-(function addThemesLink(){
-  setTimeout(()=>{ const nav = document.querySelector("header nav"); if (!nav || nav.querySelector('a[href="themes.html"]')) return;
-    const a = document.createElement("a"); a.href = "themes.html"; a.textContent = "Themes";
-    if (nav.querySelector("a")) a.style.cssText = nav.querySelector("a").style.cssText;
-    const after = nav.querySelector('a[href="zones.html"]') || nav.lastElementChild;
-    after ? after.insertAdjacentElement("afterend", a) : nav.appendChild(a); }, 0);
-})();
-(function addTamLink(){
-  setTimeout(()=>{ const nav = document.querySelector("header nav"); if (!nav || nav.querySelector('a[href="tam.html"]')) return;
-    const a = document.createElement("a"); a.href = "tam.html"; a.textContent = "TAM screener";
-    if (nav.querySelector("a")) a.style.cssText = nav.querySelector("a").style.cssText;
-    const after = nav.querySelector('a[href="forward.html"]') || nav.querySelector('a[href="buy.html"]') || nav.lastElementChild;
-    after ? after.insertAdjacentElement("afterend", a) : nav.appendChild(a); }, 0);
-})();
-(function addForwardLink(){
-  setTimeout(()=>{ const nav = document.querySelector("header nav"); if (!nav || nav.querySelector('a[href="forward.html"]')) return;
-    const a = document.createElement("a"); a.href = "forward.html"; a.textContent = "Forward test";
-    if (nav.querySelector("a")) a.style.cssText = nav.querySelector("a").style.cssText;
-    const after = nav.querySelector('a[href="buy.html"]') || nav.lastElementChild;
-    after ? after.insertAdjacentElement("afterend", a) : nav.appendChild(a); }, 0);
-})();
-(function addBuyLink(){
-  const nav = document.querySelector("header nav"); if (!nav || nav.querySelector('a[href="buy.html"]')) return;
-  const a = document.createElement("a"); a.href = "buy.html"; a.textContent = "Buy criteria";
-  if (nav.querySelector("a")) a.style.cssText = nav.querySelector("a").style.cssText;
-  const after = nav.querySelector('a[href="screener.html"]') || nav.querySelector('a[href="setups.html"]') || nav.lastElementChild;
-  after ? after.insertAdjacentElement("afterend", a) : nav.appendChild(a);
+(function buildNav(){
+  // one navigation bar for every page: all sections as blocks, in a fixed order, plus refresh controls
+  const nav = document.querySelector("header nav"); if (!nav) return;
+  const PAGES = [["index.html","Sector rotation"],["zones.html","Zones"],["themes.html","Themes"],["levels.html","Levels"],["setups.html","Setups"],
+    ["screener.html","Screener"],["buy.html","Buy criteria"],["forward.html","Forward test"],["tam.html","TAM screener"],["watchlist.html","My list"],["backtest.html","Backtest"]];
+  const here = (location.pathname.split("/").pop() || "index.html").toLowerCase();
+  if (!document.getElementById("azh-nav-css")){
+    const st = document.createElement("style"); st.id = "azh-nav-css";
+    st.textContent = `nav.azh-nav{display:flex!important;flex-wrap:wrap;gap:6px;align-items:center;font-size:.85rem;margin:6px 0 2px}
+nav.azh-nav a,.azh-act{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid var(--line,#d5dbe3);border-radius:8px;
+  background:var(--panel,#fff);color:var(--ink,#16243A)!important;font-weight:500;text-decoration:none!important;line-height:1.2;cursor:pointer;font:inherit;font-size:.85rem;white-space:nowrap}
+nav.azh-nav a:hover,.azh-act:hover{border-color:var(--focus,var(--ink,#16243A))}
+nav.azh-nav a:focus-visible,.azh-act:focus-visible{outline:2px solid var(--focus,#2563eb);outline-offset:2px}
+nav.azh-nav a[aria-current]{background:var(--ink,#16243A);color:var(--bg,#fff)!important;border-color:var(--ink,#16243A);font-weight:600}
+.azh-acts{display:flex;flex-wrap:wrap;gap:6px;margin-left:auto}
+.azh-act.go{border-style:dashed}
+.azh-msg{flex-basis:100%;font-size:.78rem;color:var(--muted,#6b7280);margin:2px 0 0}
+@media (max-width:560px){.azh-acts{margin-left:0}}`;
+    document.head.appendChild(st);
+  }
+  nav.removeAttribute("style"); nav.className = "azh-nav"; nav.setAttribute("aria-label","Dashboards");
+  nav.innerHTML = PAGES.map(([h,t])=>`<a href="${h}"${h===here?' aria-current="page"':""}>${t}</a>`).join("");
+  // refresh: 1) reload the newest published prices (skips this device's saved copy)
+  //          2) start a new price update on GitHub (opens the workflow page; tap "Run workflow" there)
+  const owner = (location.hostname.split(".")[0] || "azharudeenjm-lang"), repo = (location.pathname.split("/")[1] || "AZHSTK-Dashboard");
+  const ghRun = /github\.io$/.test(location.hostname) ? `https://github.com/${owner}/${repo}/actions/workflows/update.yml` : "https://github.com/azharudeenjm-lang/AZHSTK-Dashboard/actions/workflows/update.yml";
+  const acts = document.createElement("span"); acts.className = "azh-acts";
+  acts.innerHTML = `<button type="button" class="azh-act" id="azh-refresh" title="Load the newest prices the dashboard has published">↻ Refresh</button>
+    <a class="azh-act go" href="${ghRun}" target="_blank" rel="noopener" title="Open GitHub to start a new price update now (tap Run workflow)">⚡ Update prices now</a>`;
+  nav.appendChild(acts);
+  const msg = document.createElement("div"); msg.className = "azh-msg"; msg.id = "azh-msg"; nav.appendChild(msg);
+  document.getElementById("azh-refresh").onclick = async () => {
+    const b = document.getElementById("azh-refresh"); b.disabled = true; b.textContent = "↻ Refreshing…";
+    try { if (window.caches) { const ks = await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); } } catch(e){}
+    const u = new URL(location.href); u.searchParams.set("r", Date.now()); location.replace(u.toString());
+  };
+  // tell the viewer how fresh the prices are
+  fetch("regime.json?r=" + Date.now(), {cache:"no-store"}).then(r=>r.ok?r.json():null).then(j=>{
+    if (!j) return; const when = j.live ? `live, ${j.live}` : (j.asof || j.date || j.generated || "");
+    if (when) msg.textContent = `Prices as of ${when}.`;
+  }).catch(()=>{});
 })();
 (function pwa(){
   const add = (tag, attrs) => { const el = document.createElement(tag); Object.entries(attrs).forEach(([k,v])=>el.setAttribute(k,v)); document.head.appendChild(el); };
