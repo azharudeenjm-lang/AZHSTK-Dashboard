@@ -50,11 +50,13 @@ TEMPLATE = r"""
     <div><b>2. Strong push</b><span>Up at least 8% on the week.</span></div>
     <div><b>3. Leader</b><span>6-month return in the top 20% of all liquid stocks (RS 80+).</span></div>
     <div><b>4. Near highs</b><span>Close within 5% of the 52-week high.</span></div>
+    <div><b>5. Market filter</b><span>New entries only while market breadth is above 60%: more than 60% of liquid stocks closing above their own 50-day average. Below that, no new entries; open trades keep their stops.</span></div>
     <div><b>Stop-loss</b><span>Low of the breakout week. Exit if a week closes below it.</span></div>
     <div><b>Trailing stop</b><span>The 10-week average once it rises above the stop-loss. Exit on the first weekly close below it. Never move it down.</span></div>
   </div>
 </section>
 
+<section class="panel" id="mkt"></section>
 <section class="panel" id="stats"></section>
 
 <section class="panel">
@@ -79,7 +81,7 @@ TEMPLATE = r"""
     <button type="button" id="sortd" class="tog sel" title="Reverse the order" style="cursor:pointer"></button>
   </div>
   <div class="tools" id="logbar" style="display:none">
-    <label class="tog">Rule <select id="lg_set" class="sel"><option value="by">Weekly momentum breakout (Buy criteria rule)</option><option value="tt8">Trend Template 8/8</option><option value="tt7">Trend Template 7/8</option><option value="tte">Stage 2 start (early)</option><option value="t3">3-touch breakouts (all)</option><option value="t3s">3-touch breakouts (strong only)</option></select></label>
+    <label class="tog">Rule <select id="lg_set" class="sel"><option value="by">Weekly momentum breakout (Buy criteria rule, breadth &gt; 60%)</option><option value="by50">Weekly momentum breakout, breadth &gt; 50%</option><option value="by0">Weekly momentum breakout, no market filter</option><option value="tt8">Trend Template 8/8</option><option value="tt7">Trend Template 7/8</option><option value="tte">Stage 2 start (early)</option><option value="t3">3-touch breakouts (all)</option><option value="t3s">3-touch breakouts (strong only)</option></select></label>
     <label class="tog">Show <select id="lg_st" class="sel"><option value="">All trades</option><option value="open">Still open</option><option value="closed">Closed</option><option value="win">Closed with a profit</option><option value="loss">Closed with a loss</option></select></label>
     <label class="tog">Entry year <select id="lg_y" class="sel"><option value="">All</option></select></label>
     <label class="tog">Stock <input type="search" id="lg_q" placeholder="e.g. HFCL" style="width:110px"></label>
@@ -127,19 +129,37 @@ const store = { get(k){ try { return localStorage.getItem(k); } catch(e){ return
 const riskEl = document.getElementById("risk"), cleanEl = document.getElementById("clean");
 riskEl.value = store.get("azh:buyrisk") || "";
 document.getElementById("gen").textContent = `Updated ${D.generated}. Week ending ${dl(D.week)}${D.forming ? " (in progress)" : ""}.`;
-const S = D.stats;
-document.getElementById("stats").innerHTML = S ? `<h2>Track record of this rule</h2>
+const VLAB = {"60":"breadth above 60% (the rule)","50":"breadth above 50%","0":"no market filter"};
+let bv = store.get("azh:bybv"); if (!VLAB[bv]) bv = "60";
+const M = D.mkt || null;
+if (M) document.getElementById("mkt").innerHTML = `<h2>Market filter: ${M.ok ? '<span class="ok">new entries allowed</span>' : '<span class="bad">no new entries</span>'}</h2>
+  <p class="sub" style="margin:0">Market breadth now <b>${M.now ?? "–"}%</b> of liquid stocks above their 50-day average (rule: above ${M.min}%). ${M.ok ? "Breakouts this week count as signals." : "Breakouts are not taken until breadth is back above " + M.min + "%. Open trades keep their stops."}</p>
+  <p class="sub" style="margin:6px 0 0">Last 26 weeks: ${(M.hist||[]).map(h=>`<span title="${dl(h[0])}: ${h[1]??"–"}%" style="display:inline-block;width:9px;height:${Math.max(3,(h[1]||0)/4)}px;margin-right:2px;vertical-align:bottom;border-radius:2px;background:${(h[1]||0)>M.min?'var(--up)':'var(--down)'}"></span>`).join("")} <small class="mut">green = above ${M.min}%</small></p>
+  ${(D.blocked||[]).length ? `<p class="sub" style="margin:6px 0 0">Breakouts skipped by the filter (this week and last): ${D.blocked.map(b=>`<button class="psym" data-p="${esc(b.sym)}">${esc(b.sym)}</button> <small class="mut">RS ${b.rs??"–"}</small>`).join(" · ")}</p>` : ""}`;
+function drawStats(){
+  const V = (D.variants||{})[bv] || {}, S = V.stats || D.stats, T2 = V.two || {};
+  const sg = v => v==null ? "–" : (v>0?"+":"")+fmt(v,1)+"%";
+  const cmp = D.variants ? `<details style="margin:10px 0 0"><summary style="cursor:pointer"><b>Compare the market filters</b></summary><div class="tbl" style="margin:8px 0 0"><table><thead><tr><th class="l">Market filter</th><th>Trades (5 yr)</th><th>Won</th><th>Avg per trade (5 yr)</th><th>Trades (2 yr)</th><th>Avg per closed trade (2 yr)</th><th>Incl. open</th></tr></thead><tbody>${
+      ["60","50","0"].map(k=>{ const x = D.variants[k]||{}, a = x.stats||{}, b = x.two||{}; return `<tr${k===bv?' style="font-weight:700"':""}><td class="l">${VLAB[k]}</td><td>${a.n??"–"}</td><td>${a.win!=null?a.win+"%":"–"}</td><td>${sg(a.exp)}</td><td>${b.n??"–"}</td><td>${sg(b.exp)}</td><td>${sg(b.exp_all)}</td></tr>`; }).join("")}</tbody></table></div></details>` : "";
+  document.getElementById("stats").innerHTML = S ? `<h2>Track record of this rule</h2>
   <p class="sub">Every signal in the last ~5 years across all stocks here, using exactly these stops. Fewer than half win; the edge comes from letting winners run.</p>
+  ${D.variants ? `<div class="tools" style="margin:0 0 10px"><label class="tog">Market filter <select id="bv" class="sel">${["60","50","0"].map(k=>`<option value="${k}"${k===bv?" selected":""}>${VLAB[k]}</option>`).join("")}</select></label></div>` : ""}
   <div class="kpi"><div><b>${S.n.toLocaleString("en-IN")}</b><small>trades since ${dl(S.from)}</small></div>
     <div><b>${fmt(S.win,0)}%</b><small>closed with a profit</small></div>
     <div><b class="ok">+${fmt(S.avg_win,1)}%</b><small>average winner</small></div>
     <div><b class="bad">${fmt(S.avg_loss,1)}%</b><small>average loser</small></div>
     <div><b class="${S.exp>=0?'ok':'bad'}">${S.exp>0?"+":""}${fmt(S.exp,1)}%</b><small>average per trade · ${S.big}% reached +50% · typical hold ${S.hold} weeks</small></div></div>
+  ${T2.n!=null ? `<p class="sub" style="margin:10px 0 0"><b>Last 2 years:</b> ${T2.n} closed trades, ${T2.win??"–"}% won, ${sg(T2.exp)} per closed trade; ${sg(T2.exp_all)} including ${T2.nopen} open trade${T2.nopen===1?"":"s"} at today's price.</p>` : ""}
   <p class="sub" style="margin:10px 0 0">Biggest winners: ${S.best.map(b=>`<button class="psym" data-p="${esc(b.sym)}">${esc(b.sym)}</button> +${b.r}% (from ${dl(b.sd)})`).join(" · ")}. Costs are not included.</p>
   <p class="sub" style="margin:6px 0 0">By year: ${(S.years||[]).map(y=>`${y.y}: ${y.n} trades, ${y.exp>0?"+":""}${fmt(y.exp,1)}% per trade, ${fmt(y.win,0)}% won`).join(" · ")}. Results swing a lot with the market: big in strong years, close to flat in choppy ones.</p>
+  ${cmp}
   <p class="sub" style="margin:6px 0 0"><a href="#" id="seeby" style="color:var(--focus);font-weight:600">See every trade of the last 2 years →</a></p>` : "";
+  const sel = document.getElementById("bv");
+  if (sel) sel.onchange = () => { bv = sel.value; store.set("azh:bybv", bv); drawStats(); };
+}
+drawStats();
 document.addEventListener("click", ev => { if (ev.target && ev.target.id === "seeby"){ ev.preventDefault();
-  document.getElementById("lg_set").value = "by"; view = "log"; logN = 300; draw(); document.querySelector(".tabs").scrollIntoView({behavior:"smooth"}); } });
+  document.getElementById("lg_set").value = bv === "60" ? "by" : "by" + bv; view = "log"; logN = 300; draw(); document.querySelector(".tabs").scrollIntoView({behavior:"smooth"}); } });
 function qty(entry, sl){ const r = +riskEl.value; if (!r || !entry || !sl || entry <= sl) return "–"; const q = Math.floor(r / (entry - sl)); return `${q.toLocaleString("en-IN")} <small class="mut">(₹${Math.round(q*entry).toLocaleString("en-IN")})</small>`; }
 const flags = f => (f||[]).map(x=>`<span class="flag">${esc(x)}</span>`).join("");
 const qabEl = document.getElementById("qab"); qabEl.checked = store.get("azh:buyqab") === "1";
@@ -325,7 +345,7 @@ function logRows(){
   const src = LOG[set==="t3s" ? "t3" : set] || [];
   const rows = [];
   for (const a of src){
-    const r = {sym:a[0], name:LOG.names[a[0]]||"", ed:a[1], ep:a[2], xd:a[3], xp:a[4], g:a[5], mx:a[6], why:a[7], days:a[8], strong:!!a[9]};
+    const r = {sym:a[0], name:LOG.names[a[0]]||"", ed:a[1], ep:a[2], xd:a[3], xp:a[4], g:a[5], mx:a[6], why:a[7], days:a[8], strong:set.startsWith("t3") && !!a[9], br:set.startsWith("by") ? a[9] : null};
     if (set==="t3s" && !r.strong) continue;
     if (st==="open" && r.xd) continue;
     if (st==="closed" && !r.xd) continue;
@@ -347,7 +367,7 @@ function drawLog(t, hint){
       if (view==="log") draw(); }).catch(()=>{ hint.textContent = "The trade list is not available yet. It appears after the next update."; });
     return;
   }
-  const rows = srt(logRows()), weekly = lg("lg_set").value.startsWith("t3") || lg("lg_set").value === "by";
+  const rows = srt(logRows()), weekly = lg("lg_set").value.startsWith("t3") || lg("lg_set").value.startsWith("by");
   const cl = rows.filter(r=>r.xd), w = cl.filter(r=>r.g>0), avg = a => a.length ? a.reduce((s,r)=>s+r.g,0)/a.length : null;
   const sg = v => v==null ? "–" : (v>0?"+":"")+fmt(v,1)+"%";
   hint.innerHTML = `<div class="kpi" style="margin:0 0 10px"><div><b>${rows.length.toLocaleString("en-IN")}</b><small>trades shown (${rows.length-cl.length} still open)</small></div>
@@ -357,7 +377,7 @@ function drawLog(t, hint){
     Every entry and exit the rule made in the last 2 years, with the same entry and exit rules as the tabs. Open trades show today's price. ${weekly ? "Held is in weeks." : "Held is in trading days."} Costs are not included.`;
   const shown = rows.slice(0, logN);
   t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Entry date</th><th>Entry</th><th>Exit date</th><th>Exit / now</th><th>Gain</th><th>Max gain</th><th>Held</th><th class="l">Exit reason</th></tr></thead><tbody>${shown.map(r=>`<tr>
-    ${nm(r)}<td>${dl(r.ed)}${r.strong?'<span class="new">strong</span>':""}</td><td>₹${fmt(r.ep)}</td><td>${r.xd?dl(r.xd):'<span class="new">open</span>'}</td>
+    ${nm(r)}<td>${dl(r.ed)}${r.strong?'<span class="new">strong</span>':""}${r.br!=null?`<small class="mut" style="display:block">breadth ${r.br}%</small>`:""}</td><td>₹${fmt(r.ep)}</td><td>${r.xd?dl(r.xd):'<span class="new">open</span>'}</td>
     <td>₹${fmt(r.xp)}${r.xd?"":'<small class="mut" style="display:block">now</small>'}</td><td>${pc(r.g)}</td><td>${pc(r.mx)}</td><td>${r.days}${weekly?" wk":" d"}</td><td class="l">${esc(r.why||(r.xd?"":"–"))}</td></tr>`).join("") || '<tr><td colspan="9" class="mut">No trades match.</td></tr>'}</tbody>`;
   more.innerHTML = rows.length > logN ? `<button type="button" class="sel" style="cursor:pointer" id="lg_more">Show ${Math.min(500, rows.length-logN)} more (${rows.length-logN} hidden)</button>` : "";
   if (lg("lg_more")) lg("lg_more").onclick = () => { logN += 500; draw(); };
@@ -366,7 +386,7 @@ function drawLog(t, hint){
 lg("lg_q").oninput = () => { logN = 300; draw(); };
 lg("lg_csv").onclick = () => {
   const rows = srt(logRows()), q = v => `"${String(v??"").replace(/"/g,'""')}"`;
-  const csv = ["Symbol,Name,Entry date,Entry,Exit date,Exit or price now,Gain %,Max gain %,Held,Exit reason,Strong"].concat(rows.map(r=>[r.sym,r.name,r.ed,r.ep,r.xd||"open",r.xp,r.g,r.mx,r.days,r.why||"",r.strong?"yes":""].map(q).join(","))).join("\n");
+  const csv = ["Symbol,Name,Entry date,Entry,Exit date,Exit or price now,Gain %,Max gain %,Held,Exit reason,Strong,Breadth at signal %"].concat(rows.map(r=>[r.sym,r.name,r.ed,r.ep,r.xd||"open",r.xp,r.g,r.mx,r.days,r.why||"",r.strong?"yes":"",r.br??""].map(q).join(","))).join("\n");
   const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], {type:"text/csv"})); a.download = `trades_${lg("lg_set").value}.csv`; document.body.appendChild(a); a.click(); a.remove();
 };
 function draw(){
