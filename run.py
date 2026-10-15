@@ -218,6 +218,20 @@ def main():
             print(f"  ! NSE results skipped: {str(e)[:100]}")
             nse_f = fundm.load_nse()
     fu = fundm.combine(stocks, fund, nse_f, own_facts)
+    hl = {}
+    try:            # halal check for the stock pop-up (NIFTY500 Shariah index + business screen)
+        from src import halal
+        hl_lists = halal.refresh(demo=a.demo, intraday=a.intraday)
+        if a.demo and not hl_lists.get("sh500"):
+            n5 = [x["sym"] for x in stocks if x.get("liquid")][:300]
+            hl_lists = {"n500": n5, "sh500": n5[::3], "sh50": n5[:30:3], "at": datetime.now().isoformat(timespec="seconds")}
+        hl = halal.classify(stocks, fu, hl_lists)
+        for sym_, h_ in hl.items():          # screener conditions
+            if h_["s"] in ("ok", "unk"):
+                for tf_ in ("d", "w"):
+                    sg[tf_].setdefault(sym_ + ".NS", {}).update({"hl_nofail": 1, **({"hl_ok": 1} if h_["s"] == "ok" else {})})
+    except Exception as e:
+        print(f"  ! halal check skipped: {str(e)[:120]}")
     by_rec, tp, tt_rec = {}, None, {}
     # Buy criteria tab: weekly momentum breakouts with stop-loss and trailing stop
     from src import buy, buy_page
@@ -259,6 +273,12 @@ def main():
             print(f"  A-plus breakouts: {ap_['n']} base breakouts logged, {ap_['watch']} bases on watch")
         except Exception as e:
             print(f"  ! A-plus breakouts skipped: {str(e)[:120]}")
+        try:            # weekly SMC (change of character + order block); writes docs/smc.json for its tab
+            from src import smc
+            sm_ = smc.build(px, stocks)
+            print(f"  weekly SMC: {sm_['n']} trades in 2 years, {sm_['setups']} setups waiting, {sm_['open']} open")
+        except Exception as e:
+            print(f"  ! weekly SMC skipped: {str(e)[:120]}")
         buy_page.render(clean(by_page))
         for t, r in by_sc.items():
             sg["w"].setdefault(t, {}).update(r)
@@ -334,7 +354,7 @@ def main():
     profiles.write(clean(stocks), clean(sectors), clean({"d": zd, "w": zw}), clean({"d": hd, "w": hw}),
                    clean({"d": ld, "w": lw}), fmap, {"d": dates_d, "w": dates_w}, gen,
                    {"partial": partial, "asof": asof}, clean(su), clean(mon),
-                   extra={"rs": rs, "earn": earn, "fib": clean(fibs), "sg": sg, "ser": clean(ser), "geo": clean(geo), "ew": clean(ewg), "nw": nws, "fu": clean(fu), "al": own_al, "by": clean(by_rec), "th": th_chips, "tt": clean(tt_rec)})
+                   extra={"rs": rs, "earn": earn, "fib": clean(fibs), "sg": sg, "ser": clean(ser), "geo": clean(geo), "ew": clean(ewg), "nw": nws, "fu": clean(fu), "al": own_al, "by": clean(by_rec), "th": th_chips, "tt": clean(tt_rec), "hl": hl})
     try:
         profiles.write_long(px, tick, {"d": dates_d, "w": dates_w})
     except Exception as e:
