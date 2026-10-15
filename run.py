@@ -262,9 +262,11 @@ def main():
         try:            # every trade of the last 2 years, loaded by the "All past trades" tab only when opened
             ttl = (by_page.get("tt") or {}).pop("log", None) or {}
             tl = {"generated": by_page.get("generated"), "names": {x["sym"]: x["name"] for x in stocks},
-                  "tt8": ttl.get("8", []), "tt7": ttl.get("7", []), "tte": ttl.get("e", []), "by": by_page.pop("log", None) or [], "t3": (by_page.get("t3") or {}).pop("log", None) or []}
+                  "tt8": ttl.get("8", []), "tt7": ttl.get("7", []), "tte": ttl.get("e", []), "by": by_page.pop("log", None) or [], **{"by" + k: v for k, v in (by_page.pop("logs", None) or {}).items() if k != "60"}, "t3": (by_page.get("t3") or {}).pop("log", None) or []}
             (DOCS / "trade_log.json").write_text(json.dumps(clean(tl), separators=(",", ":")), encoding="utf-8")
             print(f"  trade log: {len(tl['tt8'])} (8/8), {len(tl['tt7'])} (7/8), {len(tl['tte'])} (stage 2 start), {len(tl['t3'])} (3-touch), {len(tl['by'])} (weekly momentum) trades")
+            if by_page.get("mkt"):
+                print(f"  buy criteria market filter: breadth {by_page['mkt']['now']}% ({'entries allowed' if by_page['mkt']['ok'] else 'no new entries'})")
         except Exception as e:
             print(f"  ! trade log skipped: {str(e)[:120]}")
         try:            # A-plus breakout composite (weekly); writes docs/aplus.json for its tab
@@ -279,6 +281,7 @@ def main():
             print(f"  weekly SMC: {sm_['n']} trades in 2 years, {sm_['setups']} setups waiting, {sm_['open']} open")
         except Exception as e:
             print(f"  ! weekly SMC skipped: {str(e)[:120]}")
+        by_page.pop("logs", None)
         buy_page.render(clean(by_page))
         for t, r in by_sc.items():
             sg["w"].setdefault(t, {}).update(r)
