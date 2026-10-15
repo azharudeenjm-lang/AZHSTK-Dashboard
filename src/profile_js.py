@@ -458,6 +458,14 @@ const NWK = {res:["Results","#2F62C8"], ord:["Order win","#1E8F5A"], deal:["Deal
 function newsAgo(iso){ const d = Math.round((new Date(new Date().toISOString().slice(0,10)) - new Date(iso)) / 864e5);
   return d<=0 ? "today" : d===1 ? "yesterday" : `${d} days ago`; }
 const QGC = {A:"#1E8F5A", B:"#2F62C8", C:"#C9780F", D:"#C2453B"};
+const HLC = {ok:["#1E8F5A","✓"], no:["#C2453B","✕"], doubt:["#C9780F","?"], unk:["#5B6472","?"]};
+function halalBlock(p){
+  const h = p.hl; if (!h) return "";
+  const [c, ic] = HLC[h.s] || HLC.unk;
+  return `<div class="pf-sec"><h3>Halal check <span class="pchip" style="--c:${c};margin-left:6px">${ic} ${esc(h.t)}</span></h3>
+    <ul style="margin:0 0 6px;padding-left:18px;font-size:.85rem">${(h.r||[]).map(x=>`<li>${esc(x)}</li>`).join("")}</ul>
+    <p class="pf-mut" style="font-size:.75rem;margin:0">Based on the NIFTY500 Shariah index (NSE Indices, screened monthly by TASIS: no conventional finance, alcohol, tobacco, pork, gambling or adult entertainment; interest-based debt ≤ 25% of assets; interest income ≤ 3% of income; cash + receivables ≤ 90% of assets)${h.asof?`, list as of ${esc(h.asof)}`:""}. Stocks outside the NIFTY 500 get only a business check from their sector and name. This is a guide, not a fatwa: confirm with a Shariah screener or scholar before investing.</p></div>`;
+}
 function fundBlock(p){
   const f = p.fu || {}, al = p.al || [];
   const v = (x, d=1, suf="") => x==null ? "–" : fmt(x, d) + suf;
@@ -540,6 +548,7 @@ function render(){
   ${p.tt ? `<details style="margin:0 0 10px"><summary style="cursor:pointer;font-size:.88rem"><b>Trend Template: ${p.tt.k}/8</b> ${p.tt.k===8?'<span class="pchip" style="--c:#1E8F5A">Stage 2</span>':'<span class="pchip o" style="--c:#C9780F">one check missing</span>'} <span class="pf-mut">RS ${p.tt.rs??"–"} · ${p.tt.hi!=null?p.tt.hi+"% from the 52-week high":""}${p.tt.k===8&&p.tt.days?` · passing ${p.tt.days} sessions`:""} · exit: stop 8% below entry, then a weekly close below the 50-day MA ₹${fmt(p.tt.exit,2)}</span></summary>
     <ul style="list-style:none;margin:6px 0 0;padding:0;font-size:.84rem">${p.tt.checks.map(([l,ok,v])=>`<li style="padding:2px 0"><b class="${ok?'pf-ok':'pf-bad'}">${ok?'✓':'✗'}</b> ${esc(l)} <span class="pf-mut">· ${esc(v)}</span></li>`).join("")}${p.tt.ideal?'<li class="pf-mut" style="padding:2px 0">200-day MA rising 4+ months: ideal</li>':""}</ul></details>` : ""}
   ${(p.th||[]).length ? `<p style="font-size:.85rem;margin:0 0 10px"><span class="pf-mut">Themes:</span> ${p.th.map(t=>`<a href="themes.html#${esc(t.id)}" class="pchip o" style="--c:${({Leading:"#1E8F5A",Improving:"#2F62C8",Weakening:"#C9780F",Lagging:"#C2453B"})[t.state]||"#5B6472"};text-decoration:none;margin-right:4px">${esc(t.name)}${t.state?" · "+t.state:""}</a>`).join("")}</p>` : ""}
+  ${halalBlock(p)}
   ${fundBlock(p)}
   ${newsBlock(p)}
   ${tf==="m" ? renderMonthly(p, s) : `  ${tf==="w" && IDX && IDX.partial ? `<p class="pf-mut" style="font-size:.8rem;margin:0 0 10px">This week is still forming (prices up to ${dl(IDX.asof)}), so the weekly zone can change until Friday's close.</p>` : ""}

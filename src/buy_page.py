@@ -66,6 +66,7 @@ TEMPLATE = r"""
     <button role="tab" data-v="tt7" aria-selected="false">Trend Template 7/8</button>
     <button role="tab" data-v="tte" aria-selected="false">Stage 2 start (early)</button>
     <button role="tab" data-v="ap" aria-selected="false">A-plus breakout</button>
+    <button role="tab" data-v="smc" aria-selected="false">Weekly SMC</button>
     <button role="tab" data-v="t3" aria-selected="false">3-touch trendline breakouts</button>
     <button role="tab" data-v="t3n" aria-selected="false">Near a 3-touch trendline</button>
     <button role="tab" data-v="log" aria-selected="false">All past trades (2 years)</button>
@@ -102,6 +103,11 @@ TEMPLATE = r"""
     <label class="tog">Breakout volume <select id="ap_vol" class="sel"><option value="2">≥ 2× its 20-wk average</option><option value="sd">&gt; average + 2 std dev (strict)</option><option value="">any</option></select></label>
     <label class="tog">RS at breakout <select id="ap_rs" class="sel"><option value="">any</option><option value="70">70+</option><option value="80">80+</option><option value="90">90+</option></select></label>
     <label class="tog">Show trades <select id="ap_span" class="sel"><option value="91">last 3 months</option><option value="">all 2 years</option></select></label>
+  </div>
+  <div class="tools" id="smcbar" style="display:none">
+    <label class="tog">Target <select id="smc_tg" class="sel"><option value="3">3R (3 × risk)</option><option value="2">2R (2 × risk)</option></select></label>
+    <label class="tog">RS at change of character <select id="smc_rs" class="sel"><option value="80">80+</option><option value="70">70+</option><option value="">any</option></select></label>
+    <label class="tog">Show trades <select id="smc_span" class="sel"><option value="91">last 3 months</option><option value="">all 2 years</option></select></label>
   </div>
   <div class="sub" id="hint" style="margin:0 0 12px"></div>
   <div class="tbl"><table id="t"></table></div>
@@ -162,6 +168,7 @@ const SORTS = {
         ["Exit date", r=>r.tr&&r.tr.xd, -1], ["Divergence warning first", r=>r.tr&&r.tr.div?(r.tr.div.ago<=20?2:1):0, -1], ["Nearest 52-week high", r=>r.hi, -1], ["Template checks passed now", r=>r.k, -1], ["Room above the 50-day MA", r=>r.room, 1], ["Price", r=>r.price, -1], NAME],
   t3: [["Default (newest first)", null, 1], ["Breakout date", r=>r.bd, -1], RS, ["Gain", r=>r.xd ? r.xg : r.gain, -1], ["Max gain since breakout", r=>r.mx, -1],
        ["Breakout week gain", r=>r.wk, -1], ["Touches", r=>r.touches, -1], ["Trendline length (weeks)", r=>r.span, -1], ["Strong first", r=>r.strong?1:0, -1], NAME],
+  smc: [["Entry week (newest)", r=>r.ed, -1], ["Gain", r=>r.g, -1], ["Max gain", r=>r.mx, -1], ["RS", r=>r.rs, -1], ["Still open first", r=>r.open?1:0, -1], NAME],
   ap: [["Breakout week (newest)", r=>r.ed, -1], RS, ["Gain", r=>r.g, -1], ["Max gain", r=>r.mx, -1], ["Volume ×", r=>r.a[14], -1], ["Still open first", r=>r.open?1:0, -1], NAME],
   log: [["Entry date", r=>r.ed, -1], ["Exit date", r=>r.xd, -1], ["Gain", r=>r.g, -1], ["Max gain", r=>r.mx, -1], ["Days / weeks held", r=>r.days, -1], ["Entry price", r=>r.ep, -1], NAME],
   t3n: [["Default", null, 1], ["Distance to trigger", r=>r.dist, 1], RS, ["Touches", r=>r.touches, -1], ["Trendline length (weeks)", r=>r.span, -1], NAME],
@@ -268,6 +275,47 @@ function drawAP(t, hint){
     <tbody><tr><td colspan="14" class="l" style="padding-top:18px"><b>Watch list: bases forming now</b> <span class="mut">(tight ${P.base_w}-week base, price within 5% of the base high, conditions you ticked already met; a weekly close above the trigger on heavy volume makes it a breakout)</span></td></tr>
     ${W.slice(0,60).map(w=>`<tr>${nm(w)}<td colspan="2">Trigger <b>₹${fmt(w.trig)}</b> <span class="mut">(${fmt(w.dist,1)}% away)</span></td><td>₹${fmt(w.price)}</td><td></td><td><b>${w.rs??"–"}</b></td><td></td><td>${w.cmf!=null?yes(w.cmf>0.05, fmt(w.cmf,2)):"–"}</td><td>${yes(w.obv)}</td><td>${yes(w.mrs)}</td><td>${w.chopmax??"–"} → ${w.chop??"–"}</td><td>${w.tight}%</td><td colspan="2"></td></tr>`).join("") || '<tr><td colspan="14" class="mut">No bases close to breaking out with these conditions.</td></tr>'}</tbody>`;
 }
+// ---------- Weekly SMC (smc.json, loaded when the tab is opened) ----------
+let SMC = null, smcLoading = false, smcN = 200;
+["smc_tg","smc_rs","smc_span"].forEach(id=>{ const el = document.getElementById(id), v = store.get("azh:"+id); if (v!==null) el.value = v;
+  el.onchange = () => { store.set("azh:"+id, el.value); smcN = 200; draw(); }; });
+// log row: 0 sym, 1 entry week, 2 entry, 3 exit week, 4 exit/now, 5 gain, 6 max gain, 7 reason, 8 weeks, 9 risk %, 10 RS, 11 stop, 12 target, 13 CHoCH week
+function drawSMC(t, hint){
+  const $ = id => document.getElementById(id);
+  if (!SMC){
+    hint.textContent = "Loading the weekly SMC list…"; t.innerHTML = "";
+    if (!smcLoading){ smcLoading = true;
+      fetch("smc.json", {cache:"no-cache"}).then(r=>r.ok?r.json():Promise.reject()).then(j=>{ SMC = j; if (view==="smc") draw(); })
+        .catch(()=>{ hint.textContent = "The weekly SMC list appears after the next full update."; }); }
+    return;
+  }
+  const tg = $("smc_tg").value, rsMin = $("smc_rs").value, L = (SMC.logs||{})[tg] || [];
+  const ok = (a, r) => !r || (a[10] != null && a[10] >= +r);
+  const sel = L.filter(a=>ok(a, rsMin));
+  const sg = v => v==null ? "–" : (v>0?"+":"")+fmt(v,1)+"%";
+  const cmpRows = [["2R, any RS","2",""],["3R, any RS","3",""],["2R, RS 70+","2","70"],["3R, RS 70+","3","70"],["2R, RS 80+","2","80"],["3R, RS 80+","3","80"]];
+  hint.innerHTML = statBox({...estats(sel), from: SMC.since}, `Weekly SMC, ${tg}R target${rsMin?`, RS ${rsMin}+`:""}`) +
+    `<details style="margin:0 0 10px"><summary style="cursor:pointer"><b>Compare targets and RS filters</b> (last 2 years)</summary><div class="tbl" style="margin:8px 0 0"><table style="font-size:.85rem"><thead><tr><th class="l">Version</th><th>Trades</th><th>Won</th><th>Avg win</th><th>Avg loss</th><th>Per closed trade</th><th>Incl. open</th></tr></thead><tbody>${
+      cmpRows.map(([n, g, r])=>{ const X = estats(((SMC.logs||{})[g]||[]).filter(a=>ok(a, r))); return `<tr><td class="l">${n}</td><td>${X.n}</td><td>${X.win!=null?X.win+"%":"–"}</td><td class="ok">${sg(X.avg_win)}</td><td class="bad">${sg(X.avg_loss)}</td><td><b>${sg(X.avg)}</b></td><td>${sg(X.avg_all)}</td></tr>`; }).join("")}</tbody></table></div></details>` +
+    `Weekly charts. <b>Setup</b>: in a downtrend (falling swing highs and lows), a weekly close above the last swing high is a change of character. The <b>order block</b> is the last red week at the start of that move. <b>Entry</b>: within 8 weeks, buy the first pullback into the order block while price is in the lower half of the move, at the top of the block. <b>Stop</b>: just below the block. <b>Target</b>: ${tg}× the risk. Weekly stops are wide (often 7–10%), so size positions from the stop. In testing: about +2.3% per trade overall, and +8% with RS 80+ but on few trades, so treat that as unproven.`;
+  const S = (SMC.setups||[]).filter(x=>!rsMin || (x.rs!=null && x.rs >= +rsMin));
+  const span = $("smc_span").value, cut = span ? new Date(Date.now() - (+span)*864e5).toISOString().slice(0,10) : "";
+  let rows = sel.filter(a=>a[1] >= cut).map(a=>({sym:a[0], name:(SMC.names[a[0]]||[])[0], sector:(SMC.names[a[0]]||[])[1], a, ed:a[1], g:a[5], mx:a[6], rs:a[10], open:!a[3]}));
+  rows = srt(rows); const total = rows.length; rows = rows.slice(0, smcN);
+  const more = $("more");
+  more.innerHTML = total > smcN ? `<button type="button" class="sel" style="cursor:pointer" id="smc_more">Show ${Math.min(300,total-smcN)} more (${total-smcN} hidden)</button>` : "";
+  if ($("smc_more")) $("smc_more").onclick = () => { smcN += 300; draw(); };
+  t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Change of character</th><th>Order block (buy zone)</th><th>Price now</th><th>Stop</th><th>Target</th><th>Risk</th><th>RS</th><th class="l">Status</th></tr></thead>
+    <tbody><tr><td colspan="9" class="l"><b>Setups waiting for a pullback</b> <span class="mut">(${S.length}; place a buy at the top of the zone with the stop below it)</span></td></tr>
+    ${S.slice(0,80).map(x=>`<tr>${nm(x)}<td>${dl(x.choch)} <small class="mut">(${x.weeks} wk ago)</small></td><td>₹${fmt(x.zl)} – <b>₹${fmt(x.zh)}</b></td><td>₹${fmt(x.price)}<small class="mut" style="display:block">${x.dist>0?fmt(x.dist,1)+"% above the zone":"in the zone"}</small></td>
+      <td>₹${fmt(x.stop)}</td><td>₹${fmt(tg==="3"?x.t3:x.t2)}</td><td>${fmt(x.risk,1)}%</td><td><b>${x.rs??"–"}</b></td>
+      <td class="l">${x.in_zone?(x.discount?'<span class="new">buy zone now</span>':'<span class="flag">in zone, not yet in discount</span>'):'<span class="mut">waiting</span>'}</td></tr>`).join("") || '<tr><td colspan="9" class="mut">No setups waiting right now.</td></tr>'}</tbody>
+    <thead><tr><th class="l">Stock</th><th>Entry week</th><th>Entry</th><th>Now / exit</th><th>Gain</th><th>Stop</th><th>Target</th><th>Risk</th><th>RS</th></tr></thead>
+    <tbody><tr><td colspan="9" class="l"><b>${total} trade${total===1?"":"s"}</b> <span class="mut">${span?"in the last 3 months":"in the last 2 years"}${total>smcN?`, showing ${smcN}`:""}</span></td></tr>
+    ${rows.map(r=>{ const a = r.a; return `<tr>${nm(r)}<td>${dl(a[1])}<small class="mut" style="display:block">CHoCH ${dl(a[13])}</small></td><td>₹${fmt(a[2])}</td>
+      <td>₹${fmt(a[4])}${a[3]?`<small class="${a[5]>0?'ok':'bad'}" style="display:block">${dl(a[3])} · ${esc(a[7]||"")}</small>`:'<small class="mut" style="display:block">open</small>'}</td>
+      <td>${pc(a[5])}<small class="mut" style="display:block">max ${a[6]>0?"+":""}${fmt(a[6],1)}%</small></td><td>₹${fmt(a[11])}</td><td>₹${fmt(a[12])}</td><td>${fmt(a[9],1)}%</td><td><b>${a[10]??"–"}</b></td></tr>`; }).join("") || '<tr><td colspan="9" class="mut">No trades with these settings in this period.</td></tr>'}</tbody>`;
+}
 // ---------- all past trades (loaded only when the tab is opened) ----------
 let LOG = null, logN = 300;
 const lg = id => document.getElementById(id);
@@ -327,10 +375,12 @@ function draw(){
   lg("logbar").style.display = view === "log" ? "" : "none"; lg("more").innerHTML = "";
   lg("ttebar").style.display = view === "tte" ? "" : "none";
   lg("apbar").style.display = view === "ap" ? "" : "none";
-  hint.style.maxWidth = (view === "ap" || view === "tte") ? "none" : "";
-  document.querySelectorAll("#clean,#qab,#risk").forEach(e=>e.closest("label").style.display = view==="log" || ((view==="tte" || view==="ap") && e.id!=="risk") ? "none" : "");
+  lg("smcbar").style.display = view === "smc" ? "" : "none";
+  hint.style.maxWidth = (view === "ap" || view === "tte" || view === "smc") ? "none" : "";
+  document.querySelectorAll("#clean,#qab,#risk").forEach(e=>e.closest("label").style.display = view==="log" || ((view==="tte" || view==="ap" || view==="smc") && e.id!=="risk") ? "none" : "");
   if (view==="log"){ drawLog(t, hint); return; }
   if (view==="ap"){ drawAP(t, hint); return; }
+  if (view==="smc"){ drawSMC(t, hint); return; }
   if (view==="open"){
     const rows = srt(D.open.filter(keep));
     hint.innerHTML = `${rows.filter(r=>r.ago<=1).length} new signal(s) in the last two weeks, ${rows.length} open trade(s) in all. Enter at about the signal price; the quantity uses your risk per trade and the stop-loss.`;

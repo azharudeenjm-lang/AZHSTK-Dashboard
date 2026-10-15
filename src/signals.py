@@ -106,6 +106,8 @@ META += [(i, "Ownership and alerts", l, k) for i, l, k in _own.META]
 META += [(i, "Buy criteria (weekly)", l, k) for i, l, k in _buy.META]
 META += [(i, "Trend lines", l, k) for i, l, k in _t3.META]
 META += [(i, "Trend Template (Minervini)", l, k) for i, l, k in _tt.META]
+META += [("hl_ok", "Halal", "Halal: in the NIFTY500 Shariah index", "s"),
+         ("hl_nofail", "Halal", "Halal: not excluded (compliant, or business looks permissible but not verified)", "s")]
 META += [(i, "Themes", l, k) for i, l, k in _TH_META]
 
 LVMAP = {"Breakout": "lv_brk", "Trendline breakout": "lv_tlb", "Retest": "lv_ret",
