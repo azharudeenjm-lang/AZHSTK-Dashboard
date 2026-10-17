@@ -132,10 +132,20 @@ document.getElementById("gen").textContent = `Updated ${D.generated}. Week endin
 const VLAB = {"60":"breadth above 60% (the rule)","50":"breadth above 50%","0":"no market filter"};
 let bv = store.get("azh:bybv"); if (!VLAB[bv]) bv = "60";
 const M = D.mkt || null;
-if (M) document.getElementById("mkt").innerHTML = `<h2>Market filter: ${M.ok ? '<span class="ok">new entries allowed</span>' : '<span class="bad">no new entries</span>'}</h2>
-  <p class="sub" style="margin:0">Market breadth now <b>${M.now ?? "–"}%</b> of liquid stocks above their 50-day average (rule: above ${M.min}%). ${M.ok ? "Breakouts this week count as signals." : "Breakouts are not taken until breadth is back above " + M.min + "%. Open trades keep their stops."}</p>
-  <p class="sub" style="margin:6px 0 0">Last 26 weeks: ${(M.hist||[]).map(h=>`<span title="${dl(h[0])}: ${h[1]??"–"}%" style="display:inline-block;width:9px;height:${Math.max(3,(h[1]||0)/4)}px;margin-right:2px;vertical-align:bottom;border-radius:2px;background:${(h[1]||0)>M.min?'var(--up)':'var(--down)'}"></span>`).join("")} <small class="mut">green = above ${M.min}%</small></p>
-  ${(D.blocked||[]).length ? `<p class="sub" style="margin:6px 0 0">Breakouts skipped by the filter (this week and last): ${D.blocked.map(b=>`<button class="psym" data-p="${esc(b.sym)}">${esc(b.sym)}</button> <small class="mut">RS ${b.rs??"–"}</small>`).join(" · ")}</p>` : ""}`;
+const curOpen = () => bv==="60" ? D.open : ((D.open_v||{})[bv] || D.open);
+const curExits = () => bv==="60" ? D.exits : ((D.exits_v||{})[bv] || D.exits);
+function drawMkt(){
+  if (!M) return;
+  const thr = bv==="0" ? null : +bv, ok = thr==null || (M.now!=null && M.now > thr), line = thr ?? M.min;
+  document.getElementById("mkt").innerHTML = `<h2>Market filter: ${thr==null ? '<span class="mut">off</span> (every breakout is a signal)' : ok ? '<span class="ok">new entries allowed</span>' : '<span class="bad">no new entries</span>'}</h2>
+  <div class="tools" style="margin:0 0 8px"><label class="tog">Signals use <select id="bv" class="sel">${["60","50","0"].map(k=>`<option value="${k}"${k===bv?" selected":""}>${VLAB[k]}</option>`).join("")}</select></label></div>
+  <p class="sub" style="margin:0">Market breadth now <b>${M.now ?? "–"}%</b> of liquid stocks above their 50-day average. ${thr==null ? "With the filter off you also get breakouts in weak markets: more trades, but in testing they averaged far less per trade." : ok ? `Above ${thr}%, so breakouts this week count as signals.` : `Breakouts are not taken until breadth is back above ${thr}%. Open trades keep their stops.`} This switch changes the signals, open trades, recent exits and track record on this page; the stock pop-up and the forward test follow the ${M.min}% rule.</p>
+  <p class="sub" style="margin:6px 0 0">Last 26 weeks: ${(M.hist||[]).map(h=>`<span title="${dl(h[0])}: ${h[1]??"–"}%" style="display:inline-block;width:9px;height:${Math.max(3,(h[1]||0)/4)}px;margin-right:2px;vertical-align:bottom;border-radius:2px;background:${(h[1]||0)>line?'var(--up)':'var(--down)'}"></span>`).join("")} <small class="mut">green = above ${line}%</small></p>
+  ${bv==="60" && (D.blocked||[]).length ? `<p class="sub" style="margin:6px 0 0">Breakouts skipped by the filter (this week and last): ${D.blocked.map(b=>`<button class="psym" data-p="${esc(b.sym)}">${esc(b.sym)}</button> <small class="mut">RS ${b.rs??"–"}</small>`).join(" · ")} <small class="mut">(switch to "no market filter" to see them as trades)</small></p>` : ""}`;
+  const sel = document.getElementById("bv");
+  sel.onchange = () => { bv = sel.value; store.set("azh:bybv", bv); drawMkt(); drawStats(); draw(); };
+}
+drawMkt();
 function drawStats(){
   const V = (D.variants||{})[bv] || {}, S = V.stats || D.stats, T2 = V.two || {};
   const sg = v => v==null ? "–" : (v>0?"+":"")+fmt(v,1)+"%";
@@ -143,7 +153,7 @@ function drawStats(){
       ["60","50","0"].map(k=>{ const x = D.variants[k]||{}, a = x.stats||{}, b = x.two||{}; return `<tr${k===bv?' style="font-weight:700"':""}><td class="l">${VLAB[k]}</td><td>${a.n??"–"}</td><td>${a.win!=null?a.win+"%":"–"}</td><td>${sg(a.exp)}</td><td>${b.n??"–"}</td><td>${sg(b.exp)}</td><td>${sg(b.exp_all)}</td></tr>`; }).join("")}</tbody></table></div></details>` : "";
   document.getElementById("stats").innerHTML = S ? `<h2>Track record of this rule</h2>
   <p class="sub">Every signal in the last ~5 years across all stocks here, using exactly these stops. Fewer than half win; the edge comes from letting winners run.</p>
-  ${D.variants ? `<div class="tools" style="margin:0 0 10px"><label class="tog">Market filter <select id="bv" class="sel">${["60","50","0"].map(k=>`<option value="${k}"${k===bv?" selected":""}>${VLAB[k]}</option>`).join("")}</select></label></div>` : ""}
+  ${D.variants ? `<p class="sub" style="margin:0 0 10px">Market filter: <b>${VLAB[bv]}</b> <small class="mut">(change it at the top of the page)</small></p>` : ""}
   <div class="kpi"><div><b>${S.n.toLocaleString("en-IN")}</b><small>trades since ${dl(S.from)}</small></div>
     <div><b>${fmt(S.win,0)}%</b><small>closed with a profit</small></div>
     <div><b class="ok">+${fmt(S.avg_win,1)}%</b><small>average winner</small></div>
@@ -154,8 +164,6 @@ function drawStats(){
   <p class="sub" style="margin:6px 0 0">By year: ${(S.years||[]).map(y=>`${y.y}: ${y.n} trades, ${y.exp>0?"+":""}${fmt(y.exp,1)}% per trade, ${fmt(y.win,0)}% won`).join(" · ")}. Results swing a lot with the market: big in strong years, close to flat in choppy ones.</p>
   ${cmp}
   <p class="sub" style="margin:6px 0 0"><a href="#" id="seeby" style="color:var(--focus);font-weight:600">See every trade of the last 2 years →</a></p>` : "";
-  const sel = document.getElementById("bv");
-  if (sel) sel.onchange = () => { bv = sel.value; store.set("azh:bybv", bv); drawStats(); };
 }
 drawStats();
 document.addEventListener("click", ev => { if (ev.target && ev.target.id === "seeby"){ ev.preventDefault();
@@ -402,16 +410,17 @@ function draw(){
   if (view==="ap"){ drawAP(t, hint); return; }
   if (view==="smc"){ drawSMC(t, hint); return; }
   if (view==="open"){
-    const rows = srt(D.open.filter(keep));
-    hint.innerHTML = `${rows.filter(r=>r.ago<=1).length} new signal(s) in the last two weeks, ${rows.length} open trade(s) in all. Enter at about the signal price; the quantity uses your risk per trade and the stop-loss.`;
+    const rows = srt(curOpen().filter(keep));
+    hint.innerHTML = `Market filter: <b>${VLAB[bv]}</b>. ${rows.filter(r=>r.ago<=1).length} new signal(s) in the last two weeks, ${rows.length} open trade(s) in all. Enter at about the signal price; the quantity uses your risk per trade and the stop-loss.`;
     t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Signal week</th><th>Entry</th><th>Stop-loss</th><th>Risk</th><th>Trailing stop now</th><th>Price</th><th>Gain</th><th>Room to trail</th><th>Qty</th><th class="l">Notes</th></tr></thead><tbody>${rows.map(r=>`<tr>
       ${nm(r)}<td>${dl(r.sd)}${r.forming?'<span class="new form">forming</span>':r.ago===0?'<span class="new">new</span>':r.ago===1?'<span class="new">last week</span>':""}</td>
       <td>₹${fmt(r.entry)}</td><td>₹${fmt(r.sl)}</td><td>${fmt(r.risk,1)}%</td>
       <td><b>₹${fmt(r.trail)}</b><small class="mut" style="display:block">${esc(r.trail_kind)}</small></td>
       <td>₹${fmt(r.price)}</td><td>${pc(r.gain)}<small class="mut" style="display:block">best ${pc(r.best)}</small></td>
-      <td>${pc(r.room)}</td><td>${qty(r.price, r.trail)}</td><td class="l">RS ${r.rs??"–"} · week +${fmt(r.wkg,1)}% · grade ${esc(r.grade||"–")} ${flags(r.flags)}</td></tr>`).join("") || '<tr><td colspan="11" class="mut">No open signals right now.</td></tr>'}</tbody>`;
+      <td>${pc(r.room)}</td><td>${qty(r.price, r.trail)}</td><td class="l">RS ${r.rs??"–"} · week +${fmt(r.wkg,1)}%${r.br!=null?` · breadth ${r.br}%`:""} · grade ${esc(r.grade||"–")} ${flags(r.flags)}</td></tr>`).join("") || '<tr><td colspan="11" class="mut">No open signals right now.</td></tr>'}</tbody>`;
   } else if (view==="watch"){
-    const rows = srt(D.watch.filter(keep));
+    const openSyms = new Set(curOpen().map(r=>r.sym));
+    const rows = srt(D.watch.filter(r=>keep(r) && !openSyms.has(r.sym)));
     hint.innerHTML = "Leaders near their highs, within 5% of the 12-week breakout level. A weekly close above both trigger levels makes it a signal.";
     t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Price</th><th>Breakout level</th><th>Distance</th><th>Weekly close needed (with +8%)</th><th>RS</th><th>From 52-wk high</th><th class="l">Notes</th></tr></thead><tbody>${rows.map(r=>`<tr>
       ${nm(r)}<td>₹${fmt(r.price)}</td><td>₹${fmt(r.trig)}</td><td>${fmt(r.dist,1)}%</td><td><b>₹${fmt(r.need8)}</b></td><td>${r.rs??"–"}</td><td>${pc(r.hi52)}</td><td class="l">${flags(r.flags)}</td></tr>`).join("") || '<tr><td colspan="8" class="mut">Nothing close to triggering.</td></tr>'}</tbody>`;
@@ -474,7 +483,7 @@ function draw(){
     }
   } else {
     hint.innerHTML = "Trades closed in the last 8 weeks by the stop-loss or trailing stop.";
-    t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Signal week</th><th>Entry</th><th>Exit week</th><th>Exit</th><th>Result</th></tr></thead><tbody>${srt(D.exits).map(r=>`<tr>
+    t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Signal week</th><th>Entry</th><th>Exit week</th><th>Exit</th><th>Result</th></tr></thead><tbody>${srt(curExits()).map(r=>`<tr>
       ${nm(r)}<td>${dl(r.sd)}</td><td>₹${fmt(r.entry)}</td><td>${dl(r.xd)}</td><td>₹${fmt(r.exit)}</td><td>${pc(r.r)}</td></tr>`).join("") || '<tr><td colspan="6" class="mut">No exits recently.</td></tr>'}</tbody>`;
   }
 }

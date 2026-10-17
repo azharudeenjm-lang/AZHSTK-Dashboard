@@ -113,6 +113,27 @@ def build(px, stocks, facts=None, earn=None, today=None):
     trades_all, open_all, inside_at = runs["60"]
     exits_recent = [x for x in trades_all if x["x"] >= n - 9]
     open_now, watch, recs, sc = [], [], {}, {}
+    def open_row(j, inside, flags):
+        sym = cols[j][:-3]
+        last = C[-1, j]
+        i0 = inside["i"]
+        flags = list(flags)
+        trail = max(inside["sl"], S[-1, j] if np.isfinite(S[-1, j]) else -1)
+        risk = 1 - inside["sl"] / inside["e"] if inside["e"] else None
+        if risk is not None and risk > 0.15:
+            flags.append("Wide stop: size smaller")
+        f = facts.get(sym, {})
+        return {"sym": sym, "name": info[sym]["name"], "sector": info[sym].get("sector"), "grade": f.get("qg"),
+                "sd": ds[i0], "ago": n - 1 - i0, "entry": _f(inside["e"]), "sl": _f(inside["sl"]),
+                "risk": _f(risk * 100 if risk is not None else None, 1),
+                "trail": _f(trail), "price": _f(last), "gain": _f((last / inside["e"] - 1) * 100, 1),
+                "best": _f((inside["mx"] / inside["e"] - 1) * 100, 1),
+                "room": _f((last / trail - 1) * 100, 1) if trail > 0 else None,
+                "rs": _f(RS[i0, j] * 100, 0), "wkg": _f(C[i0, j] / C[i0 - 1, j] * 100 - 100, 1) if i0 > 0 else None,
+                "forming": forming and i0 == n - 1, "flags": flags, "br": _f(BR[i0] * 100, 0),
+                "trail_kind": "10-week average" if trail > inside["sl"] else "initial stop (breakout-week low)"}
+
+    flags_of = {}
     start_show = n - SHOW_WEEKS
     for j, t in enumerate(cols):
         sym = t[:-3]
@@ -129,21 +150,10 @@ def build(px, stocks, facts=None, earn=None, today=None):
             dd = (pd.Timestamp(e) - today).days
             if 0 <= dd <= 10:
                 flags.append(f"Results in {dd} days")
+        flags_of[j] = flags
         if inside is not None and inside["i"] >= max(0, start_show):
             i0 = inside["i"]
-            trail = max(inside["sl"], S[-1, j] if np.isfinite(S[-1, j]) else -1)
-            risk = 1 - inside["sl"] / inside["e"] if inside["e"] else None
-            if risk is not None and risk > 0.15:
-                flags.append("Wide stop: size smaller")
-            row = {"sym": sym, "name": info[sym]["name"], "sector": info[sym].get("sector"), "grade": f.get("qg"),
-                   "sd": ds[i0], "ago": n - 1 - i0, "entry": _f(inside["e"]), "sl": _f(inside["sl"]),
-                   "risk": _f(risk * 100 if risk is not None else None, 1),
-                   "trail": _f(trail), "price": _f(last), "gain": _f((last / inside["e"] - 1) * 100, 1),
-                   "best": _f((inside["mx"] / inside["e"] - 1) * 100, 1),
-                   "room": _f((last / trail - 1) * 100, 1) if trail > 0 else None,
-                   "rs": _f(RS[i0, j] * 100, 0), "wkg": _f(C[i0, j] / C[i0 - 1, j] * 100 - 100, 1) if i0 > 0 else None,
-                   "forming": forming and i0 == n - 1, "flags": flags,
-                   "trail_kind": "10-week average" if trail > inside["sl"] else "initial stop (breakout-week low)"}
+            row = open_row(j, inside, flags)
             open_now.append(row)
             recs[sym] = {"st": "new" if i0 >= n - 2 else "open", **{k: row[k] for k in
                          ("sd", "entry", "sl", "risk", "trail", "gain", "best", "room", "forming", "flags", "trail_kind")}}
@@ -163,6 +173,28 @@ def build(px, stocks, facts=None, earn=None, today=None):
                 watch.append(row)
                 recs[sym] = {"st": "watch", "trig": row["trig"], "need8": row["need8"], "dist": row["dist"]}
                 sc[t] = {"by_watch": 1}
+
+    # ---------- the same lists for the looser market filters (page switch) ----------
+    def exit_rows(trades):
+        return sorted([{"sym": x["sym"], "name": info[x["sym"]]["name"], "sd": ds[x["i"]], "xd": ds[x["x"]],
+                        "entry": _f(x["e"]), "exit": _f(x["xp"]), "r": _f(x["r"] * 100, 1)} for x in trades if x["x"] >= n - 9],
+                      key=lambda x: x["xd"], reverse=True)[:40]
+    open_v, exits_v = {}, {}
+    for k in VARIANTS:
+        if k == "60":
+            continue
+        rows = [open_row(j, ins, flags_of.get(j, [])) for j, ins in runs[k][2].items()
+                if ins is not None and ins["i"] >= max(0, start_show) and np.isfinite(C[-1, j])]
+        rows.sort(key=lambda x: (x["ago"], -(x["rs"] or 0)))
+        open_v[k] = rows
+        exits_v[k] = exit_rows(runs[k][0])
+        # pop-up: trades the 60% filter skipped still show there, flagged
+        note = "only taken with the 50% breadth filter" if k == "50" else "only taken with the market filter off"
+        for r in rows:
+            if r["sym"] not in recs or recs[r["sym"]].get("st") == "watch":
+                recs[r["sym"]] = {"st": "new" if r["ago"] <= 1 else "open",
+                                  **{q: r[q] for q in ("sd", "entry", "sl", "risk", "trail", "gain", "best", "room", "forming", "trail_kind")},
+                                  "flags": r["flags"] + [f"Breadth {r['br']:.0f}% at the signal: {note}" if r["br"] is not None else f"Below the 60% breadth filter: {note}"]}
 
     # ---------- track record of the rule on this data ----------
     def stats_of(done):
@@ -222,6 +254,6 @@ def build(px, stocks, facts=None, earn=None, today=None):
                              "price": _f(C[-1, j])} for j in np.where(SR[i])[0]]
     page = {"open": open_now, "watch": watch[:60], "exits": exits[:40], "stats": stats, "forming": forming,
             "week": ds[-1] if ds else None, "log": logs["60"], "logs": logs, "variants": variants, "mkt": mkt,
-            "blocked": blocked[:40]}
+            "blocked": blocked[:40], "open_v": open_v, "exits_v": exits_v}
     frames = {"c": c, "l": l, "sma": sma, "sig": sig, "rs": rs, "forming": forming}
     return page, recs, sc, frames

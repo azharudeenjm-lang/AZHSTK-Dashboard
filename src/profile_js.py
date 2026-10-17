@@ -459,6 +459,39 @@ function newsAgo(iso){ const d = Math.round((new Date(new Date().toISOString().s
   return d<=0 ? "today" : d===1 ? "yesterday" : `${d} days ago`; }
 const QGC = {A:"#1E8F5A", B:"#2F62C8", C:"#C9780F", D:"#C2453B"};
 const HLC = {ok:["#1E8F5A","✓"], no:["#C2453B","✕"], doubt:["#C9780F","?"], unk:["#5B6472","?"]};
+// ---------- WhatsApp alert line builder (the rules live in the ALERTS secret or alerts.txt; nothing is saved here) ----------
+const ALR = [["above","Price crosses above",1.05],["below","Price falls below",0.95],["resistance","Breaks above resistance",0],["support","Breaks below support",0],
+  ["trendline","Breaks above its falling trendline",0],["trendline down","Breaks below its rising trendline",0],["near","Comes near resistance / support / trendline",0],
+  ["ma 50","Crosses above the 50-day MA",0],["ma 200 below","Falls below the 200-day MA",0],["move 5","Moves 5% in a day",0],["volume 3","Volume 3× its average",0],
+  ["rsi 70","RSI reaches 70",0],["signal","Any dashboard signal",0],["hold buy","I hold it: Buy criteria trailing stop",-1],["hold stage2","I hold it: Stage 2 rule (50-day MA)",-1],["hold stop","I hold it: my own stop",0.92]];
+function ghRepo(){ const o = location.hostname.split(".")[0], r = location.pathname.split("/").filter(Boolean)[0]; return location.hostname.endsWith("github.io") && r ? `https://github.com/${o}/${r}` : null; }
+function alertLine(s, k, v, px){
+  const r = (n, d) => Math.round(n * 10**d) / 10**d, d = px >= 100 ? 0 : 1;
+  if (k === "above" || k === "below") return `${s} ${k} ${v || r(px * (k === "above" ? 1.05 : 0.95), d)}`;
+  if (k === "hold buy" || k === "hold stage2") return `hold ${s} ${k.split(" ")[1]} entry ${v || r(px, 2)}`;
+  if (k === "hold stop") return `hold ${s} stop ${v || r(px * 0.92, d)} entry ${r(px, 2)}`;
+  return `${s} ${k}`;
+}
+function alertBlock(s, p){
+  const gh = ghRepo();
+  return `<details class="pf-sec" style="padding-top:0"><summary style="cursor:pointer"><h3 style="display:inline">🔔 WhatsApp alert for ${esc(s)}</h3></summary>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:8px 0">
+      <select id="al-k" style="font:inherit;padding:4px 6px;border-radius:8px">${ALR.map(a=>`<option value="${a[0]}">${esc(a[1])}</option>`).join("")}</select>
+      <input id="al-v" type="number" step="0.05" placeholder="price" style="width:100px;font:inherit;padding:4px 6px;border-radius:8px">
+      <button type="button" id="al-copy" style="cursor:pointer;font:inherit;padding:4px 10px;border-radius:8px">Copy line</button></div>
+    <code id="al-line" style="display:block;font-size:.88rem;padding:6px 8px;border-radius:8px;background:rgba(127,127,127,.12)"></code>
+    <p class="pf-mut" style="font-size:.8rem;margin:6px 0 0">Paste the line into your alert list: the private <b>ALERTS</b> secret${gh?` (<a href="${gh}/settings/secrets/actions" target="_blank" rel="noopener">open secrets</a>; a secret can't be read back, so paste your whole list each time)`:""} or the public <b>alerts.txt</b> file${gh?` (<a href="${gh}/edit/main/alerts.txt" target="_blank" rel="noopener">edit on GitHub</a>)`:""}. Alerts are checked on every update, every 30 minutes in market hours.</p></details>`;
+}
+function wireAlert(s, p){
+  const k = dlg.querySelector("#al-k"), v = dlg.querySelector("#al-v"), out = dlg.querySelector("#al-line"), b = dlg.querySelector("#al-copy");
+  if (!k) return;
+  const upd = () => { const a = ALR.find(x=>x[0]===k.value); v.style.display = a && a[2] ? "" : "none";
+    if (a && a[2] && !v.dataset.touched) v.value = a[2] < 0 ? (p.px||"") : Math.round((p.px||0) * a[2] * (p.px >= 100 ? 1 : 10)) / (p.px >= 100 ? 1 : 10);
+    out.textContent = alertLine(s, k.value, a && a[2] ? v.value : "", p.px||0); };
+  k.onchange = () => { v.dataset.touched = ""; upd(); }; v.oninput = () => { v.dataset.touched = "1"; upd(); };
+  b.onclick = () => { const t = out.textContent; (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(()=>{ b.textContent = "Copied ✓"; setTimeout(()=>b.textContent="Copy line", 1500); }, ()=>{ prompt("Copy this line:", t); }); };
+  upd();
+}
 function halalBlock(p){
   const h = p.hl; if (!h) return "";
   const [c, ic] = HLC[h.s] || HLC.unk;
@@ -549,6 +582,7 @@ function render(){
     <ul style="list-style:none;margin:6px 0 0;padding:0;font-size:.84rem">${p.tt.checks.map(([l,ok,v])=>`<li style="padding:2px 0"><b class="${ok?'pf-ok':'pf-bad'}">${ok?'✓':'✗'}</b> ${esc(l)} <span class="pf-mut">· ${esc(v)}</span></li>`).join("")}${p.tt.ideal?'<li class="pf-mut" style="padding:2px 0">200-day MA rising 4+ months: ideal</li>':""}</ul></details>` : ""}
   ${(p.th||[]).length ? `<p style="font-size:.85rem;margin:0 0 10px"><span class="pf-mut">Themes:</span> ${p.th.map(t=>`<a href="themes.html#${esc(t.id)}" class="pchip o" style="--c:${({Leading:"#1E8F5A",Improving:"#2F62C8",Weakening:"#C9780F",Lagging:"#C2453B"})[t.state]||"#5B6472"};text-decoration:none;margin-right:4px">${esc(t.name)}${t.state?" · "+t.state:""}</a>`).join("")}</p>` : ""}
   ${halalBlock(p)}
+  ${alertBlock(s, p)}
   ${fundBlock(p)}
   ${newsBlock(p)}
   ${tf==="m" ? renderMonthly(p, s) : `  ${tf==="w" && IDX && IDX.partial ? `<p class="pf-mut" style="font-size:.8rem;margin:0 0 10px">This week is still forming (prices up to ${dl(IDX.asof)}), so the weekly zone can change until Friday's close.</p>` : ""}
@@ -593,6 +627,7 @@ function render(){
   </div>`;
   if (keepTop) dlg.querySelector(".pf").scrollTop = keepTop;
   dlg.querySelector(".pf-x").onclick = () => dlg.close();
+  try { wireAlert(s, p); } catch(e){}
   dlg.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{ curTF=b.dataset.t; render(); });
   wireActions();
 }
