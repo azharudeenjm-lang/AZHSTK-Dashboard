@@ -1,0 +1,69 @@
+{
+ "/api/corporates-pit": {
+  "ok": 1,
+  "fail": 0,
+  "codes": [],
+  "sample": "{\"acqNameList\":[],\"data\":[]}"
+ },
+ "/api/corporate-pledgedata": {
+  "ok": 1,
+  "fail": 0,
+  "codes": [],
+  "sample": "{\"comNameList\":[],\"data\":[]}"
+ },
+ "/api/snapshot-capital-market-largedeal": {
+  "ok": 1,
+  "fail": 0,
+  "codes": [],
+  "sample": "{\"as_on_date\":\"16-Oct-2026\",\"BULK_DEALS_DATA\":[{\"buySell\":\"BUY\",\"clientName\":\"ORION STOCKS LTD\",\"date\":\"16-Oct-2026\",\"name\":\"Aro Granite Industries Li\",\"qty\":\"70889\",\"remarks\":\"-\",\"symbol\":\"AROGRANITE\",\"watp\":\"24.91\"},{\"buySell\":\"BUY\",\"clientName\":\"IRAGE BROKING SERVICES LLP\",\"date\":\"16-Oct-2026\",\"name\":\"Aro Granite Industries Li\",\"qty\":\"140053\",\"remarks\":\"-\",\"symbol\":\"AROGRANITE\",\"watp\":\"24.67\"},{\"buySell\":\"BUY\",\"clientName\":\"ALPHAGREP SECURITIES PRIVATE LIMITED\",\"date\":\"16-Oct-2026\",\"name\":\"Aurum PropTech Limited\",\"qty\":\"562862\",\"remarks\":\"-\",\"symbol\":\"AURUM\",\"watp\":\"254.33\"},{\"buySell\":\"BUY\",\"clientName\":\"ARIHANT CAPITAL MARKETS LIMITED\",\"date\":\"16-Oct-2026\",\"name\":\"Commercial Syn Bags Ltd\",\"qty\":\"40389\",\"remarks\":\"-\",\"symbol\":\"COMSYN\",\"watp\":\"252.53\"},{\"buySell\":\"BUY\",\"clientName\":\"JUNOMONETA FINSOL PRIVATE LIMITED\",\"date\":\"16-Oct-2026\",\"name\":\"Euro Pratik Sales Limited\",\"qty\":\"784293\",\"remarks\":\"-\",\"symbol\":\"EUROPRATIK\",\"watp\":\"180.91\"},{\"buySell\":\"BUY\",\"clientName\":\"ALPHAGREP SECURITIES PRIVATE LIMITED\",\"date\":\"16-Oct-2026\",\"name\":\"Euro Pratik Sales Limited\",\"qty\":\"511727\",\"remarks\":\"-\",\"symbol\":\"EUROPRATIK\",\"watp\":\"180.38\"},{\"buySell\":\"BUY\",\"clientName\":\"MGO HIGH CONVICTION FUND INCORPORATED VCC SUB-FUND\",\"date\":\"16-Oct-2026\",\"name\":\"Green Asia Impex Limited\",\"qty\":\"128000\",\"remarks\":\"-\",\"symbol\":\"GREENASIA\",\"watp\":\"77.4\"},{\"buySell\":\"BUY\",\"clientName\":\"NAUTILUS PRIVATE CAPITAL LTD\",\"date\":\"16-Oct-2026\",\"name\":\"Green Asia Impex Limited\",\"qty\":\"644800\",\"remarks\":\"-\",\"sy"
+ },
+ "/api/reportASM": {
+  "ok": 1,
+  "fail": 0,
+  "codes": [],
+  "sample": "{\"longterm\":{\"data\":[{\"asmSurvIndicator\":\"Stage I\",\"asmTime\":\"16-Oct-2026\",\"companyName\":\"A2Z Infra Engineering Limited\",\"isin\":\"INE619I01012\",\"series\":null,\"survCode\":\"LTASM - I (13)\",\"survDesc\":\"Long Term Additional Surveillance Measure (LTASM) - Stage I\",\"symbol\":\"A2ZINFRA\",\"srno\":1},{\"asmSurvIndicator\":\"Stage I\",\"asmTime\":\"16-Oct-2026\",\"companyName\":\"Aarey Drugs & Pharmaceuticals Limited\",\"isin\":\"INE198H01019\",\"series\":null,\"survCode\":\"LTASM - I (13)\",\"survDesc\":\"Long Term Additional Surveillance Measure (LTASM) - Stage I\",\"symbol\":\"AAREYDRUGS\",\"srno\":2},{\"asmSurvIndicator\":\"Stage I\",\"asmTime\":\"16-Oct-2026\",\"companyName\":\"Aastha Spintex Limited\",\"isin\":\"INE2FMX01012\",\"series\":null,\"survCode\":\"LTASM - I (13)\",\"survDesc\":\"Long Term Additional Surveillance Measure (LTASM) - Stage I\",\"symbol\":\"AASTHA\",\"srno\":3},{\"asmSurvIndicator\":\"Stage I\",\"asmTime\":\"16-Oct-2026\",\"companyName\":\"Artemis Electricals and Projects Limited\",\"isin\":\"INE757T01025\",\"series\":null,\"survCode\":\"LTASM - I (13)\",\"survDesc\":\"Long Term Additional Surveillance Measure (LTASM) - Stage I\",\"symbol\":\"AEPL\",\"srno\":4},{\"asmSurvIndicator\":\"Stage I\",\"asmTime\":\"16-Oct-2026\",\"companyName\":\"Anlon Healthcare Limited\",\"isin\":\"INE0Y8W01025\",\"series\":null,\"survCode\":\"LTASM - I (13)\",\"survDesc\":\"Long Term Additional Surveillance Measure (LTASM) - Stage I\",\"symbol\":\"AHCL\",\"srno\":5},{\"asmSurvIndicator\":\"Stage I\",\"asmTime\":\"16-Oct-2026\",\"companyName\":\"Aimtron Electronics Limited\",\"isin\":\"INE0RUV01018\",\"series\":null,\"survCode\":"
+ },
+ "/api/reportGSM": {
+  "ok": 1,
+  "fail": 0,
+  "codes": [],
+  "sample": "[{\"companyName\":\"AGS Transact Technologies Limited\",\"gsmStage\":\"LVIII\",\"gsmTime\":\"16-Oct-2026 08:08:02\",\"isin\":\"INE583L01014\",\"survCode\":\"IBC I & GSM 0 (58)\",\"survDesc\":\"ASM IBC Stage I and GSM Stage 0\",\"symbol\":\"AGSTRA\",\"srno\":1},{\"companyName\":\"Ankit Metal & Power Limited\",\"gsmStage\":\"LVIII\",\"gsmTime\":\"16-Oct-2026 08:08:02\",\"isin\":\"INE106I01010\",\"survCode\":\"IBC I & GSM 0 (58)\",\"survDesc\":\"ASM IBC Stage I and GSM Stage 0\",\"symbol\":\"ANKITMETAL\",\"srno\":2},{\"companyName\":\"Aqylon Nexus Limited\",\"gsmStage\":\"L\",\"gsmTime\":\"16-Oct-2026 08:08:02\",\"isin\":\"INE416A01051\",\"survCode\":\"LTASM I & GSM 0 (50)\",\"survDesc\":\"LTASM Stage I and GSM Stage 0\",\"symbol\":\"AQYLON\",\"srno\":3},{\"companyName\":\"Asian Tea & Exports Limited\",\"gsmStage\":\"0\",\"gsmTime\":\"16-Oct-2026 08:08:02\",\"isin\":\"INE822B01017\",\"survCode\":\"GSM - 0 (99)\",\"survDesc\":\"Shortlisted under Graded Surveillance Measure\",\"symbol\":\"ASIANTNE\",\"srno\":4},{\"companyName\":\"Amit Spinning Industries Limited\",\"gsmStage\":\"VI\",\"gsmTime\":\"16-Oct-2026 08:08:02\",\"isin\":\"INE988A01026\",\"survCode\":\"GSM - VI (6)\",\"survDesc\":\"Graded Surveillance Measure - Stage VI\",\"symbol\":\"ASIL\",\"srno\":5},{\"companyName\":\"ATN International Limited\",\"gsmStage\":\"VI\",\"gsmTime\":\"16-Oct-2026 08:08:02\",\"isin\":\"INE803A01027\",\"survCode\":\"GSM - VI (6)\",\"survDesc\":\"Graded Surveillance Measure - Stage VI\",\"symbol\":\"ATNINTER\",\"srno\":6},{\"companyName\":\"Balkrishna Paper Mills Limited\",\"gsmStage\":\"0\",\"gsmTime\":\"16-Oct-2026 08:08:02\",\"isin\":\"INE875R01011\",\"survCode\":\"GSM - 0 (99)\",\"survDe"
+ },
+ "/api/results-comparision": {
+  "ok": 400,
+  "fail": 0,
+  "codes": [],
+  "sample": "{\"resCmpData\":[{\"re_amt_grs_np_asst\":null,\"re_bal_rbi_oth_bnk_funds\":null,\"re_basic_eps\":null,\"re_basic_eps_for_cont_dic_opr\":\"1.91\",\"re_bsc_eps_bfr_exi\":null,\"re_cap_ade_rat\":null,\"re_cet_1_ret\":null,\"re_con_pro_loss\":\"2760.57\",\"re_create_dt\":\"03-FEB-2025\",\"re_curr_tax\":\"1061\",\"re_debt_eqt_rat\":null,\"re_debt_rdmption\":null,\"re_debt_ser_cov\":\"0.09\",\"re_deff_tax\":\"-20.9\",\"re_depr_und_exp\":\"244.01\",\"re_desc_note_fin\":\"Debt service coverage ratio for the period (3 months ended) 01/10/2024 to 31/12/2024 = 15.83   Debt service coverage ratio for the period (Nine months ended) 01/04/2024 to 31/12/2024 = 16.60      But the system is only allowing value upto 9.00 therefore we are adding the notes.\",\"re_desc_note_seg\":\"-\",\"re_dil_eps_bfr_exi\":null,\"re_dilut_eps_for_cont_dic_opr\":\"1.89\",\"re_diluted_eps\":null,\"re_excepn_items\":null,\"re_excepn_items_new\":\"0\",\"re_extraord_items\":null,\"re_face_val\":\"10\",\"re_face_value_debt\":null,\"re_from_dt\":\"01-OCT-2024\",\"re_goi_per_shhd\":null,\"re_grs_npa\":null,\"re_grs_npa_per\":null,\"re_inc_dre_sttr\":\"-2810.03\",\"re_income_inv\":null,\"re_int_dis_adv_bills\":null,\"re_int_earned\":null,\"re_int_expd\":null,\"re_int_new\":\"1010.8\",\"re_int_ser_cov\":\"0.05\",\"re_minority_int\":null,\"re_net_profit\":\"2760.57\",\"re_net_sale\":\"72972.67\",\"re_notes_to_ac\":\"\",\"re_oper_exp\":null,\"re_oper_exp_bef_pro_cont\":null,\"re_oth\":null,\"re_oth_exp\":\"665.51\",\"re_oth_inc\":null,\"re_oth_inc_new\":\"366.17\",\"re_oth_oper_exp\":null,\"re_oth_pro_cont\":null,\"re_oth_tot_exp\":\"69538.17\",\"re_paid_debt\":nul"
+ },
+ "results_parsed": {
+  "with_figures": 302,
+  "tried": 400,
+  "cached": 2582,
+  "example": {
+   "20MICRONS": {
+    "res_end": "2024-12-31",
+    "sg": 22.7,
+    "pg": 0.8,
+    "eps_ttm": 15.25,
+    "npm_q": 5.4,
+    "at": "2026-10-15"
+   }
+  }
+ },
+ "/api/equity-stockIndices": {
+  "ok": 0,
+  "fail": 8,
+  "codes": [
+   404,
+   404,
+   404,
+   404,
+   404
+  ]
+ },
+ "_run": {
+  "at": "2026-10-17 21:33 IST",
+  "mode": "full",
+  "seconds": 1456
+ }
+}
