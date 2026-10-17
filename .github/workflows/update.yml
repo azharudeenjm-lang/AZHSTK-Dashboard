@@ -53,6 +53,13 @@ jobs:
           restore-keys: cache-
 
       - name: Run pipeline
+        env:
+          # WhatsApp / Telegram alerts (optional): add these under Settings > Secrets and variables > Actions
+          WA_PHONE: ${{ secrets.WA_PHONE }}
+          WA_APIKEY: ${{ secrets.WA_APIKEY }}
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          TG_CHAT: ${{ secrets.TG_CHAT }}
+          ALERTS: ${{ secrets.ALERTS }}
         run: |
           ARGS=""
           if [ "${{ github.event.schedule }}" = "30 3 * * 6" ]; then ARGS="--fundamentals --backtest"; fi
