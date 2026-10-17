@@ -351,6 +351,13 @@ def main():
     sg_sym = {tf: {t[:-3]: v for t, v in sg[tf].items()} for tf in ("d", "w")}
     ser_sym = {tf: {t[:-3]: v for t, v in ser[tf].items()} for tf in ("d", "w")}
     screener_page.render(clean(scr_rows), clean(sg_sym), clean(ser_sym))
+    # WhatsApp / Telegram alerts (rules in the ALERTS secret or alerts.txt)
+    try:
+        from src import notify
+        _bp = locals().get("by_page") or {}
+        notify.run(px, stocks, ld, lw, _bp, locals().get("by_rec") or {}, _bp.get("tt") or {}, intraday=a.intraday, demo=a.demo)
+    except Exception as e:
+        print(f"  ! alerts skipped: {str(e)[:150]}")
     pwa.write()
     print("   stock profiles")
     gen = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%d %b %Y, %I:%M %p IST")

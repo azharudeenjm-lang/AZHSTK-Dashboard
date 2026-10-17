@@ -1,0 +1,40 @@
+# AZHSTK alerts: WhatsApp messages from the dashboard's updates (every 30 minutes in market hours, and after the close).
+# One rule per line. Anything after # is a note and is ignored. Capitals don't matter.
+#
+# PRIVACY: this file is public if your repository is public. To keep your holdings private, put the same
+# lines in a GitHub Secret called ALERTS instead (Settings > Secrets and variables > Actions). Both are read.
+#
+# Each alert is sent once when it happens and re-arms when the condition goes away, so it won't repeat
+# every 30 minutes. Intraday alerts use the live price; "confirmed" ones come after the close.
+
+# ---------- settings ----------
+filter 60              # market filter for Buy criteria signal alerts: 60, 50 or off
+summary on             # one summary message after the close each trading day
+near 3                 # "near" warnings: within 3% of a stop or level
+# quiet 22:00-07:00    # no messages in these hours (held back and sent after)
+# timezone Asia/Riyadh # your time zone for quiet hours (default Asia/Riyadh)
+
+# ---------- market-wide ----------
+buy signals            # every new Buy criteria signal (forming during the week, confirmed after Friday's close)
+# buy exits            # every Buy criteria exit on the dashboard (not just yours)
+stage2 signals         # every new Stage 2 start entry
+# stage2 exits         # every Stage 2 start exit on the dashboard
+breadth                # market breadth crossing the filter level, up or down
+
+# ---------- stocks you hold (warns near the stop, alerts on the exit) ----------
+# hold TARIL buy entry 561.6        # follows the Buy criteria trailing stop
+# hold HFCL stage2 entry 120        # Stage 2 rule: daily close below the 50-day MA, 12% emergency stop
+# hold ABC stop 250 entry 280       # your own stop-loss
+
+# ---------- any stock ----------
+# TARIL above 353          # price crosses above 353
+# TARIL below 290          # price falls below 290
+# TARIL resistance         # breaks above resistance (the dashboard's levels; add "weekly" for weekly levels)
+# TARIL support            # breaks below support
+# TARIL trendline          # breaks above its falling trendline   ("trendline down" = breaks below the rising one)
+# TARIL near               # comes near resistance, support or its rising trendline
+# TARIL ma 50              # crosses above the 50-day average      ("ma 200 below" = falls below the 200-day)
+# TARIL move 5             # moves 5% or more in a day, up or down
+# TARIL volume 3           # volume 3x its 20-day average
+# TARIL rsi 70             # RSI(14) reaches 70                    ("rsi 30 below" = drops to 30)
+# TARIL signal             # any dashboard signal for it: Buy criteria, Stage 2 start, level or trendline break
