@@ -26,6 +26,7 @@ on:
 
 permissions:
   contents: write
+  issues: write        # reads your "Alert: ..." issues and notes on them when an alert is sent
 
 concurrency:
   group: dashboard
@@ -60,6 +61,9 @@ jobs:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT: ${{ secrets.TG_CHAT }}
           ALERTS: ${{ secrets.ALERTS }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ALERTS_REPO: ${{ secrets.ALERTS_REPO }}     # optional: a private repo for alert issues, e.g. you/AZHSTK-alerts
+          ALERTS_TOKEN: ${{ secrets.ALERTS_TOKEN }}   # needed only with ALERTS_REPO: a token with Issues read/write on that repo
         run: |
           ARGS=""
           if [ "${{ github.event.schedule }}" = "30 3 * * 6" ]; then ARGS="--fundamentals --backtest"; fi
