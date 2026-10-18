@@ -4,6 +4,10 @@
 # PRIVACY: this file is public if your repository is public. To keep your holdings private, put the same
 # lines in a GitHub Secret called ALERTS instead (Settings > Secrets and variables > Actions). Both are read.
 #
+# EASIEST: open a stock's pop-up > "WhatsApp alert" > "Add alert". That opens a ready-filled GitHub issue titled
+# "Alert: ..."; every open Alert issue is an active alert and closing it stops the alert. Use this file for settings
+# and market-wide alerts.
+#
 # Each alert is sent once when it happens and re-arms when the condition goes away, so it won't repeat
 # every 30 minutes. Intraday alerts use the live price; "confirmed" ones come after the close.
 
