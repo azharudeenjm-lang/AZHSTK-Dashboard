@@ -80,11 +80,11 @@ YAHOO_SECTOR_MAP = {
 
 def map_yahoo(sector, industry):
     """Translate Yahoo's sector/industry into an NSE-style industry name."""
-    ind = (industry or "").lower()
+    ind = industry.lower() if isinstance(industry, str) else ""      # Yahoo sometimes gives NaN
     for keys, nse in YAHOO_INDUSTRY_MAP:
         if any(k in ind for k in keys):
             return nse
-    return YAHOO_SECTOR_MAP.get(sector or "", None)
+    return YAHOO_SECTOR_MAP.get(sector, None) if isinstance(sector, str) else None
 
 
 def _get_csv(url, tries=3):
@@ -169,7 +169,9 @@ def build_universe(yahoo_meta=None):
     sectors, industries = [], []
     for sym in eq["symbol"]:
         ys, yi = ymeta.get(sym, (None, None))
-        sec = overrides.get(sym) or nse_ind.get(sym) or map_yahoo(ys, yi) or "Unclassified"
+        ni = nse_ind.get(sym)
+        ni = ni if isinstance(ni, str) and ni.strip() else None           # blank CSV cells come back as NaN
+        sec = overrides.get(sym) or ni or map_yahoo(ys, yi) or "Unclassified"
         sectors.append(sec)
         industries.append(yi if isinstance(yi, str) and yi else sec)
 
