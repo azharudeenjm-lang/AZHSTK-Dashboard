@@ -472,15 +472,20 @@ function alertLine(s, k, v, px){
   if (k === "hold stop") return `hold ${s} stop ${v || r(px * 0.92, d)} entry ${r(px, 2)}`;
   return `${s} ${k}`;
 }
+let ALREPO = null;
+fetch("alerts_cfg.json", {cache:"no-cache"}).then(r=>r.ok?r.json():{}).then(j=>{ ALREPO = j.repo || null; }).catch(()=>{});
+const alRepoUrl = () => ALREPO ? `https://github.com/${ALREPO}` : ghRepo();
 function alertBlock(s, p){
-  const gh = ghRepo();
   return `<details class="pf-sec" style="padding-top:0"><summary style="cursor:pointer"><h3 style="display:inline">🔔 WhatsApp alert for ${esc(s)}</h3></summary>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:8px 0">
       <select id="al-k" style="font:inherit;padding:4px 6px;border-radius:8px">${ALR.map(a=>`<option value="${a[0]}">${esc(a[1])}</option>`).join("")}</select>
-      <input id="al-v" type="number" step="0.05" placeholder="price" style="width:100px;font:inherit;padding:4px 6px;border-radius:8px">
-      <button type="button" id="al-copy" style="cursor:pointer;font:inherit;padding:4px 10px;border-radius:8px">Copy line</button></div>
+      <input id="al-v" type="number" step="0.05" placeholder="price" style="width:100px;font:inherit;padding:4px 6px;border-radius:8px"></div>
     <code id="al-line" style="display:block;font-size:.88rem;padding:6px 8px;border-radius:8px;background:rgba(127,127,127,.12)"></code>
-    <p class="pf-mut" style="font-size:.8rem;margin:6px 0 0">Paste the line into your alert list: the private <b>ALERTS</b> secret${gh?` (<a href="${gh}/settings/secrets/actions" target="_blank" rel="noopener">open secrets</a>; a secret can't be read back, so paste your whole list each time)`:""} or the public <b>alerts.txt</b> file${gh?` (<a href="${gh}/edit/main/alerts.txt" target="_blank" rel="noopener">edit on GitHub</a>)`:""}. Alerts are checked on every update, every 30 minutes in market hours.</p></details>`;
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 0">
+      <button type="button" id="al-add" style="cursor:pointer;font:inherit;font-weight:600;padding:5px 12px;border-radius:8px">＋ Add alert</button>
+      <button type="button" id="al-copy" style="cursor:pointer;font:inherit;padding:5px 12px;border-radius:8px">Copy line</button>
+      <a id="al-list" target="_blank" rel="noopener" style="align-self:center;font-size:.85rem">My alerts</a></div>
+    <p class="pf-mut" style="font-size:.8rem;margin:6px 0 0"><b>Add alert</b> opens a ready-filled GitHub issue: just tap <b>Submit new issue</b>. Every open "Alert:" issue is an active alert; close the issue to stop it. When an alert is sent, it is also noted on its issue. Checked on every update (every 30 minutes in market hours).</p></details>`;
 }
 function wireAlert(s, p){
   const k = dlg.querySelector("#al-k"), v = dlg.querySelector("#al-v"), out = dlg.querySelector("#al-line"), b = dlg.querySelector("#al-copy");
@@ -490,6 +495,13 @@ function wireAlert(s, p){
     out.textContent = alertLine(s, k.value, a && a[2] ? v.value : "", p.px||0); };
   k.onchange = () => { v.dataset.touched = ""; upd(); }; v.oninput = () => { v.dataset.touched = "1"; upd(); };
   b.onclick = () => { const t = out.textContent; (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(()=>{ b.textContent = "Copied ✓"; setTimeout(()=>b.textContent="Copy line", 1500); }, ()=>{ prompt("Copy this line:", t); }); };
+  const add = dlg.querySelector("#al-add"), list = dlg.querySelector("#al-list"), base = alRepoUrl();
+  if (base){
+    list.href = `${base}/issues?q=${encodeURIComponent("is:issue is:open Alert in:title")}`;
+    add.onclick = () => { const t = out.textContent, nm = ALR.find(x=>x[0]===k.value);
+      const body = `${t}\n\n---\n${nm ? nm[1] : ""} · ₹${p.px} when added. One rule per line above the line. Close this issue to stop the alert.`;
+      window.open(`${base}/issues/new?title=${encodeURIComponent("Alert: " + t)}&body=${encodeURIComponent(body)}`, "_blank", "noopener"); };
+  } else { add.style.display = "none"; list.style.display = "none"; }
   upd();
 }
 function halalBlock(p){

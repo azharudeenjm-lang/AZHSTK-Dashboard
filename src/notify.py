@@ -47,10 +47,67 @@ def _rules_text():
     return "\n".join(parts)
 
 
-def parse(text):
+def _gh(method, path, token, **kw):
+    import requests
+    return requests.request(method, "https://api.github.com" + path, timeout=20,
+                            headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}, **kw)
+
+
+def alerts_repo():
+    """Repository whose issues hold alerts: ALERTS_REPO (e.g. a private repo) or this one."""
+    return (os.environ.get("ALERTS_REPO") or os.environ.get("GITHUB_REPOSITORY") or "").strip()
+
+
+def _issue_rules():
+    """Open issues titled "Alert: ..." written by the repository owner. Returns [(line, issue number)]."""
+    repo = alerts_repo()
+    token = os.environ.get("ALERTS_TOKEN") if os.environ.get("ALERTS_REPO") else os.environ.get("GITHUB_TOKEN")
+    token = token or os.environ.get("ALERTS_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    if not repo or not token:
+        return []
+    owner = repo.split("/")[0].lower()
+    me = (os.environ.get("GITHUB_REPOSITORY_OWNER") or owner).lower()
+    out = []
+    try:
+        for page in range(1, 4):
+            r = _gh("GET", f"/repos/{repo}/issues", token, params={"state": "open", "per_page": 100, "page": page})
+            if not r.ok:
+                print(f"  ! alerts: could not read issues of {repo} ({r.status_code})")
+                break
+            items = r.json()
+            for it in items:
+                title = (it.get("title") or "").strip()
+                who = ((it.get("user") or {}).get("login") or "").lower()
+                if "pull_request" in it or not re.match(r"(?i)alerts?\b", title) or who not in (owner, me):
+                    continue                   # only your own "Alert: ..." issues count (anyone can open issues on a public repo)
+                body = (it.get("body") or "").split("\n---", 1)[0]
+                lines = [x for x in body.splitlines() if x.split("#", 1)[0].strip()]
+                if not lines:
+                    lines = [re.sub(r"(?i)^alerts?\s*[:\-]?\s*", "", title)]
+                out += [(x, it["number"]) for x in lines]
+            if len(items) < 100:
+                break
+    except Exception as e:
+        print(f"  ! alerts: issues not read: {str(e)[:100]}")
+    return out
+
+
+def comment(num, text):
+    repo = alerts_repo()
+    token = os.environ.get("ALERTS_TOKEN") if os.environ.get("ALERTS_REPO") else os.environ.get("GITHUB_TOKEN")
+    if not (repo and token and num):
+        return
+    try:
+        _gh("POST", f"/repos/{repo}/issues/{num}/comments", token, json={"body": text})
+    except Exception:
+        pass
+
+
+def parse(text, extra=()):
     cfg = {"filter": "60", "quiet": None, "summary": False, "tz": "Asia/Riyadh", "near": 3.0}
     rules, bad = [], []
-    for raw in text.splitlines():
+    for raw, src in [(x, None) for x in text.splitlines()] + list(extra):
+        n0 = len(rules)
         line = raw.split("#", 1)[0].strip()
         if not line:
             continue
@@ -122,7 +179,9 @@ def parse(text):
                 else:
                     raise ValueError
         except Exception:
-            bad.append(raw.strip())
+            bad.append(raw.strip() + (f" (issue #{src})" if src else ""))
+        if src and len(rules) > n0:
+            rules[-1]["src"] = src
     return cfg, rules, bad
 
 
@@ -142,7 +201,7 @@ def _send(text):
                 if not good:
                     print(f"  ! whatsapp: {r.status_code} {re.sub(r'<[^>]+>', ' ', r.text)[:160]}")
             except Exception as e:
-                print(f"  ! whatsapp: {str(e)[:120]}")
+                print(f"  ! whatsapp: {str(e).replace(key, '***').replace(phone, '***')[:120]}")
             time.sleep(3)                       # CallMeBot asks for a pause between messages
     tok, chat = os.environ.get("TG_TOKEN"), os.environ.get("TG_CHAT")
     if tok and chat:
@@ -154,7 +213,7 @@ def _send(text):
                 if not r.ok:
                     print(f"  ! telegram: {r.status_code} {r.text[:160]}")
             except Exception as e:
-                print(f"  ! telegram: {str(e)[:120]}")
+                print(f"  ! telegram: {str(e).replace(tok, '***')[:120]}")
     return ok
 
 
@@ -199,8 +258,13 @@ def _in_quiet(q, now):
 
 # ---------------------------------------------------------------- main
 def run(px, stocks, ld, lw, by_page, by_rec, tt_page, intraday=False, demo=False):
+    try:                                 # tells the stock pop-up where its "Add alert" button should open an issue
+        from .config import DOCS
+        (DOCS / "alerts_cfg.json").write_text(json.dumps({"repo": alerts_repo() or None}), encoding="utf-8")
+    except Exception:
+        pass
     text = _rules_text()
-    cfg, rules, bad = parse(text)
+    cfg, rules, bad = parse(text, [] if demo else _issue_rules())
     if bad:
         print("  ! alerts: could not read " + "; ".join(bad[:5]))
     if not rules and not cfg["summary"]:
@@ -231,15 +295,17 @@ def run(px, stocks, ld, lw, by_page, by_rec, tt_page, intraday=False, demo=False
     on, sent = state.setdefault("on", {}), state.setdefault("sent", {})
     msgs, commit = [], []              # (key, kind, text) ; kind: "edge" uses `on`, "once" uses `sent`
 
+    cur = {"src": None}
+
     def edge(key, cond, msg):
         if cond and not on.get(key):
-            msgs.append((key, "edge", msg))
+            msgs.append((key, "edge", msg, cur["src"]))
         elif not cond and on.get(key):
             commit.append((key, "off"))
 
     def once(key, msg):
         if key not in sent:
-            msgs.append((key, "once", msg))
+            msgs.append((key, "once", msg, cur["src"]))
 
     thr = {"60": 60, "50": 50, "0": None}[cfg["filter"]]
     open_rows = by_page.get("open", []) if cfg["filter"] == "60" else (by_page.get("open_v") or {}).get(cfg["filter"], by_page.get("open", []))
@@ -250,6 +316,7 @@ def run(px, stocks, ld, lw, by_page, by_rec, tt_page, intraday=False, demo=False
 
     for r in rules:
         t = r["t"]
+        cur["src"] = r.get("src")
         if t == "buy_signals":
             for o in open_rows:
                 if o.get("ago") == 0:
@@ -279,7 +346,7 @@ def run(px, stocks, ld, lw, by_page, by_rec, tt_page, intraday=False, demo=False
                 if prev is not None and prev != ok:
                     msgs.append(("breadth_ok", "flag:" + str(ok),
                                  f"{'📈' if ok else '📉'} Market breadth {now_b:.0f}% is now {'above' if ok else 'below'} {lim}%: "
-                                 f"{'new Buy criteria entries allowed again' if ok else 'no new Buy criteria entries'}"))
+                                 f"{'new Buy criteria entries allowed again' if ok else 'no new Buy criteria entries'}", cur["src"]))
                 elif prev is None:
                     commit.append(("breadth_ok", "flag:" + str(ok)))
         elif t == "hold":
@@ -405,11 +472,11 @@ def run(px, stocks, ld, lw, by_page, by_rec, tt_page, intraday=False, demo=False
                     if r.get("stop"):
                         bits.append(f"stop ₹{_f(r['stop'])}")
                     lines.append("• " + " · ".join(bits))
-            msgs.append((key, "once", "\n".join(lines)))
+            msgs.append((key, "once", "\n".join(lines), None))
 
     # ---------- deliver ----------
     if fresh and not demo:
-        for key, kind, _ in msgs:
+        for key, kind, *_ in msgs:
             if kind == "edge":
                 on[key] = True
             elif kind.startswith("flag:"):
@@ -437,11 +504,14 @@ def run(px, stocks, ld, lw, by_page, by_rec, tt_page, intraday=False, demo=False
             msgs = []
         elif _send(body):
             print(f"  alerts: sent {len(msgs)}")
+            for m in msgs:                      # note it on the alert's issue, so each issue keeps its own history
+                if m[3]:
+                    comment(m[3], f"🔔 Sent {now:%d %b %Y %H:%M}: " + m[2].split("\n")[0])
         else:
             print(f"  ! alerts: sending failed, will retry next run")
             msgs = []
         if not demo and configured():
-            for key, kind, _ in msgs:
+            for key, kind, *_ in msgs:
                 if kind == "edge":
                     on[key] = True
                 elif kind.startswith("flag:"):
