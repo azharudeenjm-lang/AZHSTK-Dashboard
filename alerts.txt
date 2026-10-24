@@ -24,6 +24,7 @@ buy signals            # every new Buy criteria signal (forming during the week,
 stage2 signals         # every new Stage 2 start entry
 # stage2 exits         # every Stage 2 start exit on the dashboard
 breadth                # market breadth crossing the filter level, up or down
+# cpr signals          # new CPR entries: weekly breakout above H4 (RS 80+) and monthly reversal at L3 (breadth > 60%)
 
 # ---------- stocks you hold (warns near the stop, alerts on the exit) ----------
 # hold TARIL buy entry 561.6        # follows the Buy criteria trailing stop

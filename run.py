@@ -275,6 +275,16 @@ def main():
             print(f"  A-plus breakouts: {ap_['n']} base breakouts logged, {ap_['watch']} bases on watch")
         except Exception as e:
             print(f"  ! A-plus breakouts skipped: {str(e)[:120]}")
+        try:            # CPR + Camarilla screener (weekly / monthly levels); writes docs/cpr.json for its tab
+            from src import cpr
+            cp_, cp_sc = cpr.build(px, stocks)
+            for tf in ("d", "w"):
+                for t, r in cp_sc.items():
+                    sg[tf].setdefault(t, {}).update(r)
+            by_page["cpr_trig"] = cp_["trig"]
+            print(f"  CPR: {cp_['rows']} stocks, trades logged {cp_['n']}, {len(cp_['trig'])} new entries today")
+        except Exception as e:
+            print(f"  ! CPR skipped: {str(e)[:120]}")
         try:            # weekly SMC (change of character + order block); writes docs/smc.json for its tab
             from src import smc
             sm_ = smc.build(px, stocks)
