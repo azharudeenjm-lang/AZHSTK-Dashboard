@@ -29,7 +29,7 @@ from .config import CACHE
 
 STATE = "notify_state.json"
 FILE = "alerts.txt"
-KEYWORDS = {"filter", "quiet", "summary", "timezone", "near", "buy", "stage2", "breadth", "hold"}
+KEYWORDS = {"cpr", "filter", "quiet", "summary", "timezone", "near", "buy", "stage2", "breadth", "hold"}
 
 
 # ---------------------------------------------------------------- rules
@@ -126,6 +126,8 @@ def parse(text, extra=()):
                 cfg["tz"] = w[1]
             elif k == "near":
                 cfg["near"] = float(lw[1].rstrip("%"))
+            elif k == "cpr":
+                rules.append({"t": "cpr_signals"})
             elif k in ("buy", "stage2"):
                 what = lw[1] if len(lw) > 1 else "signals"
                 if what not in ("signals", "signal", "exits", "exit"):
@@ -338,6 +340,9 @@ def run(px, stocks, ld, lw, by_page, by_rec, tt_page, intraday=False, demo=False
                 tr = e.get("tr") or {}
                 if tr.get("xd") == last_day and not intraday:
                     once(f"s2x:{e['sym']}:{tr['xd']}", f"🔴 Stage 2 EXIT: {e['sym']} at ₹{_f(tr.get('xp'))} ({'+' if (tr.get('g') or 0) > 0 else ''}{_f(tr.get('g'), 1)}%) · {tr.get('why') or 'closed below the 50-day MA'}{lk(e['sym'])}")
+        elif t == "cpr_signals":
+            for x in by_page.get("cpr_trig") or []:
+                once(f"cpr:{x['sym']}:{x['k']}:{x['d']}", f"🟢 {x['k']}: {x['sym']} ₹{_f(x['e'])} · stop ₹{_f(x['stop'])} · target ₹{_f(x['tgt'])}{lk(x['sym'])}")
         elif t == "breadth":
             now_b, lim = mkt.get("now"), thr or 60
             if now_b is not None:

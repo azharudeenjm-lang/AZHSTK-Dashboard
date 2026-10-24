@@ -69,6 +69,7 @@ TEMPLATE = r"""
     <button role="tab" data-v="tte" aria-selected="false">Stage 2 start (early)</button>
     <button role="tab" data-v="ap" aria-selected="false">A-plus breakout</button>
     <button role="tab" data-v="smc" aria-selected="false">Weekly SMC</button>
+    <button role="tab" data-v="cpr" aria-selected="false">CPR screener</button>
     <button role="tab" data-v="t3" aria-selected="false">3-touch trendline breakouts</button>
     <button role="tab" data-v="t3n" aria-selected="false">Near a 3-touch trendline</button>
     <button role="tab" data-v="log" aria-selected="false">All past trades (2 years)</button>
@@ -110,6 +111,18 @@ TEMPLATE = r"""
     <label class="tog">Target <select id="smc_tg" class="sel"><option value="3">3R (3 × risk)</option><option value="2">2R (2 × risk)</option></select></label>
     <label class="tog">RS at change of character <select id="smc_rs" class="sel"><option value="80">80+</option><option value="70">70+</option><option value="">any</option></select></label>
     <label class="tog">Show trades <select id="smc_span" class="sel"><option value="91">last 3 months</option><option value="">all 2 years</option></select></label>
+  </div>
+  <div class="tools" id="cprbar" style="display:none">
+    <label class="tog">Show <select id="cp_view" class="sel"><option value="scr">Screener: setups now</option><option value="log">Trades of the last 2 years</option></select></label>
+    <label class="tog">Levels <select id="cp_tf" class="sel"><option value="w">Weekly (from last week)</option><option value="m">Monthly (from last month)</option></select></label>
+    <label class="tog">Setup <select id="cp_st" class="sel"><option value="b">Breakout above H4</option><option value="r">Reversal: back above L3</option></select></label>
+    <label class="tog" id="cp_oz_l"><input type="checkbox" id="cp_oz" checked> Opened between H3 and H4</label>
+    <label class="tog">RS <select id="cp_rs" class="sel"><option value="0">any</option><option value="70">70+</option><option value="80">80+</option><option value="90">90+</option></select></label>
+    <label class="tog">Market breadth <select id="cp_br" class="sel"><option value="0">any</option><option value="50">above 50%</option><option value="60">above 60%</option></select></label>
+    <label class="tog"><input type="checkbox" id="cp_up"> Above its 50-day MA</label>
+    <label class="tog">CPR width <select id="cp_nw" class="sel"><option value="0">any</option><option value="2">narrow (under 2%)</option><option value="1">very narrow (under 1%)</option></select></label>
+    <label class="tog" id="cp_all_l"><input type="checkbox" id="cp_all"> Show all stocks (not just setups)</label>
+    <span class="tog" style="gap:6px">Best tested: <button type="button" class="sel" id="cp_p1" style="cursor:pointer">Weekly breakout, RS 80+</button><button type="button" class="sel" id="cp_p2" style="cursor:pointer">Monthly reversal, breadth 60%+</button></span>
   </div>
   <div class="sub" id="hint" style="margin:0 0 12px"></div>
   <div class="tbl"><table id="t"></table></div>
@@ -196,6 +209,7 @@ const SORTS = {
         ["Exit date", r=>r.tr&&r.tr.xd, -1], ["Divergence warning first", r=>r.tr&&r.tr.div?(r.tr.div.ago<=20?2:1):0, -1], ["Nearest 52-week high", r=>r.hi, -1], ["Template checks passed now", r=>r.k, -1], ["Room above the 50-day MA", r=>r.room, 1], ["Price", r=>r.price, -1], NAME],
   t3: [["Default (newest first)", null, 1], ["Breakout date", r=>r.bd, -1], RS, ["Gain", r=>r.xd ? r.xg : r.gain, -1], ["Max gain since breakout", r=>r.mx, -1],
        ["Breakout week gain", r=>r.wk, -1], ["Touches", r=>r.touches, -1], ["Trendline length (weeks)", r=>r.span, -1], ["Strong first", r=>r.strong?1:0, -1], NAME],
+  cpr: [["Default (entries first, then closest to the trigger)", null, 1], ["RS", r=>r.rs, -1], ["Distance to trigger", r=>r.dist, 1], ["CPR width (narrowest)", r=>r.cw, 1], ["Entry date", r=>r.ed, -1], ["Gain", r=>r.g, -1], ["Price", r=>r.price, -1], NAME],
   smc: [["Entry week (newest)", r=>r.ed, -1], ["Gain", r=>r.g, -1], ["Max gain", r=>r.mx, -1], ["RS", r=>r.rs, -1], ["Still open first", r=>r.open?1:0, -1], NAME],
   ap: [["Breakout week (newest)", r=>r.ed, -1], RS, ["Gain", r=>r.g, -1], ["Max gain", r=>r.mx, -1], ["Volume ×", r=>r.a[14], -1], ["Still open first", r=>r.open?1:0, -1], NAME],
   log: [["Entry date", r=>r.ed, -1], ["Exit date", r=>r.xd, -1], ["Gain", r=>r.g, -1], ["Max gain", r=>r.mx, -1], ["Days / weeks held", r=>r.days, -1], ["Entry price", r=>r.ep, -1], NAME],
@@ -303,6 +317,89 @@ function drawAP(t, hint){
     <tbody><tr><td colspan="14" class="l" style="padding-top:18px"><b>Watch list: bases forming now</b> <span class="mut">(tight ${P.base_w}-week base, price within 5% of the base high, conditions you ticked already met; a weekly close above the trigger on heavy volume makes it a breakout)</span></td></tr>
     ${W.slice(0,60).map(w=>`<tr>${nm(w)}<td colspan="2">Trigger <b>₹${fmt(w.trig)}</b> <span class="mut">(${fmt(w.dist,1)}% away)</span></td><td>₹${fmt(w.price)}</td><td></td><td><b>${w.rs??"–"}</b></td><td></td><td>${w.cmf!=null?yes(w.cmf>0.05, fmt(w.cmf,2)):"–"}</td><td>${yes(w.obv)}</td><td>${yes(w.mrs)}</td><td>${w.chopmax??"–"} → ${w.chop??"–"}</td><td>${w.tight}%</td><td colspan="2"></td></tr>`).join("") || '<tr><td colspan="14" class="mut">No bases close to breaking out with these conditions.</td></tr>'}</tbody>`;
 }
+// ---------- CPR screener (cpr.json, loaded when the tab is opened) ----------
+let CPR = null, cprLoading = false, cpN = 200;
+const CPI = ["cp_view","cp_tf","cp_st","cp_oz","cp_rs","cp_br","cp_up","cp_nw","cp_all"];
+CPI.forEach(id=>{ const el = document.getElementById(id), v = store.get("azh:"+id);
+  if (v!==null){ if (el.type==="checkbox") el.checked = v==="1"; else el.value = v; }
+  el.onchange = () => { store.set("azh:"+id, el.type==="checkbox" ? (el.checked?"1":"0") : el.value); cpN = 200; draw(); }; });
+if (store.get("azh:cp_rs")===null) document.getElementById("cp_rs").value = "80";
+function cpPreset(v){ const set = (id, x) => { const el = document.getElementById(id); if (el.type==="checkbox") el.checked = !!x; else el.value = x; store.set("azh:"+id, el.type==="checkbox" ? (x?"1":"0") : String(x)); };
+  Object.entries(v).forEach(([k, x])=>set(k, x)); cpN = 200; draw(); }
+document.getElementById("cp_p1").onclick = () => cpPreset({cp_tf:"w", cp_st:"b", cp_oz:1, cp_rs:"80", cp_br:"0", cp_up:0, cp_nw:"0"});
+document.getElementById("cp_p2").onclick = () => cpPreset({cp_tf:"m", cp_st:"r", cp_rs:"0", cp_br:"60", cp_up:0, cp_nw:"0"});
+const CPST = {waiting:"Waiting", entered:"Entered", failed:"Failed", below:"Below L3 now"};
+// log row: 0 sym, 1 entry date, 2 entry, 3 exit date (null = running), 4 exit/now, 5 gain, 6 reason, 7 days, 8 stop, 9 target,
+//          10 opened H3-H4 / inside, 11 RS, 12 above 50-DMA, 13 breadth, 14 CPR width
+function drawCPR(t, hint){
+  const $ = id => document.getElementById(id);
+  if (!CPR){
+    hint.textContent = "Loading the CPR levels…"; t.innerHTML = "";
+    if (!cprLoading){ cprLoading = true;
+      fetch("cpr.json", {cache:"no-cache"}).then(r=>r.ok?r.json():Promise.reject()).then(j=>{ CPR = j; if (view==="cpr") draw(); })
+        .catch(()=>{ hint.textContent = "The CPR screener appears after the next update."; }); }
+    return;
+  }
+  const tf = $("cp_tf").value, st = $("cp_st").value, rsMin = +$("cp_rs").value, brMin = +$("cp_br").value, up = $("cp_up").checked,
+        nw = +$("cp_nw").value, oz = st==="b" && $("cp_oz").checked, mode = $("cp_view").value, all = $("cp_all").checked;
+  $("cp_oz_l").style.display = st==="b" ? "" : "none"; $("cp_all_l").style.display = mode==="scr" ? "" : "none";
+  const per = tf==="w" ? "week" : "month", key = tf + st, sg = v => v==null ? "–" : (v>0?"+":"")+fmt(v,2)+"%";
+  const S = (CPR.stats||{})[`${key}|${oz?1:0}|${rsMin}|${brMin}|${up?1:0}|${nw}`];
+  const rule = st==="b" ? `${oz?"the "+per+" opened between H3 and H4; ":""}buy when price goes above <b>H4</b>; stop <b>H3</b>; target <b>H5</b>`
+                        : `price dips below <b>L3</b> and closes back above it: buy that close; stop <b>L4</b>; target <b>H3</b>`;
+  const label = `${tf==="w"?"Weekly":"Monthly"} ${st==="b"?"breakout":"reversal"}${rsMin?`, RS ${rsMin}+`:""}${brMin?`, breadth above ${brMin}%`:""}${up?", above the 50-day MA":""}${nw?`, CPR under ${nw}%`:""}`;
+  const statHtml = S ? `<div class="kpi" style="margin:0 0 10px"><div><b>${S[0].toLocaleString("en-IN")}</b><small>${esc(label)}: trades in 2 years</small></div>
+      <div><b>${S[1]}%</b><small>won</small></div><div><b class="ok">${sg(S[3])}</b><small>average winner</small></div><div><b class="bad">${sg(S[4])}</b><small>average loser</small></div>
+      <div><b class="${S[2]>=0?'ok':'bad'}">${sg(S[2])}</b><small>average per trade after costs · year 1 ${sg(S[5])} (${S[8]}) · year 2 ${sg(S[6])} (${S[9]}) · typical hold ${S[7]} day${S[7]===1?"":"s"}</small></div></div>`
+    : `<p class="sub">No tested trades with these settings.</p>`;
+  const cmp = [["Weekly breakout (opened H3–H4)","wb|1|0|0|0|0"],["Weekly breakout, RS 80+","wb|1|80|0|0|0"],["Weekly breakout, any open","wb|0|0|0|0|0"],["Weekly reversal","wr|0|0|0|0|0"],
+               ["Monthly breakout (opened H3–H4)","mb|1|0|0|0|0"],["Monthly reversal","mr|0|0|0|0|0"],["Monthly reversal, breadth 60%+","mr|0|0|60|0|0"],["Monthly reversal, breadth 60%+, RS 80+, above 50-DMA","mr|0|80|60|1|0"]];
+  const cmpHtml = `<details style="margin:0 0 10px"><summary style="cursor:pointer"><b>Compare the versions</b> (2 years, 0.15% costs)</summary><div class="tbl" style="margin:8px 0 0"><table><thead><tr><th class="l">Version</th><th>Trades</th><th>Won</th><th>Avg per trade</th><th>Year 1</th><th>Year 2</th></tr></thead><tbody>${
+      cmp.map(([n,k])=>{ const x = (CPR.stats||{})[k]; return x ? `<tr><td class="l">${n}</td><td>${x[0]}</td><td>${x[1]}%</td><td><b>${sg(x[2])}</b></td><td>${sg(x[5])}</td><td>${sg(x[6])}</td></tr>` : ""; }).join("")}</tbody></table></div>
+      <p class="sub" style="margin:6px 0 0">Levels from the previous ${per}: H3 = C + 1.1×range/4, H4 = C + 1.1×range/2, H5 = C × H/L, L3 = C − 1.1×range/4, L4 = C − 1.1×range/2. CPR = pivot (H+L+C)/3 with BC = (H+L)/2 and TC = 2×pivot − BC; narrow CPR = a quiet ${per} before. A trade still open when the ${per} ends is closed at its last close. Entries assume a fill exactly at H4 / L3, so gaps and slippage will cost a little more.</p></details>`;
+  const brNow = CPR.breadth;
+  const brWarn = brMin && brNow!=null && brNow <= brMin ? `<p class="sub" style="margin:0 0 8px"><span class="flag">Market breadth is ${brNow}% now, below your ${brMin}% filter: new entries are not taken.</span></p>` : "";
+  const more = $("more");
+  if (mode === "log"){
+    const L = ((CPR.logs||{})[key]||[]).filter(a=>(!oz || a[10]) && (a[11]||0) >= rsMin && (!brMin || (a[13]||0) > brMin) && (!up || a[12]) && (!nw || (a[14]!=null && a[14] < nw)));
+    const limited = key==="wr" ? `Trade list: the last 3 months only (the full ${CPR.since ? "2 years" : ""} is in the numbers above).` : key==="mr" && brMin < 60 ? "Trade list: all trades with breadth above 60%, and every trade of the last 3 months." : "";
+    hint.innerHTML = statHtml + cmpHtml + `<p class="sub" style="margin:0 0 8px">${esc(label)}: ${rule}. ${limited}</p>`;
+    let rows = L.map(a=>({sym:a[0], name:(CPR.names[a[0]]||[])[0], sector:(CPR.names[a[0]]||[])[1], a, ed:a[1], g:a[5], rs:a[11], dist:null, cw:a[14], price:a[4]}));
+    rows = srt(rows); const total = rows.length; rows = rows.slice(0, cpN);
+    more.innerHTML = total > cpN ? `<button type="button" class="sel" style="cursor:pointer" id="cp_more">Show ${Math.min(500,total-cpN)} more (${total-cpN} hidden)</button>` : "";
+    if ($("cp_more")) $("cp_more").onclick = () => { cpN += 500; draw(); };
+    t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Entry</th><th>Exit</th><th>Gain</th><th>Stop</th><th>Target</th><th>Days</th><th>RS</th><th>Breadth</th><th>CPR width</th></tr></thead><tbody>${rows.map(r=>{ const a = r.a; return `<tr>${nm(r)}
+      <td>₹${fmt(a[2])}<small class="mut" style="display:block">${dl(a[1])}</small></td>
+      <td>₹${fmt(a[4])}<small class="${a[3]?(a[5]>0?'ok':'bad'):'mut'}" style="display:block">${a[3]?dl(a[3])+" · "+esc(a[6]||""):"running"}</small></td>
+      <td>${pc(a[5],2)}</td><td>₹${fmt(a[8])}</td><td>₹${fmt(a[9])}</td><td>${a[7]}</td><td>${a[11]??"–"}</td><td>${a[13]??"–"}%</td><td>${a[14]!=null?fmt(a[14],2)+"%":"–"}</td></tr>`; }).join("") || '<tr><td colspan="10" class="mut">No trades with these settings.</td></tr>'}</tbody>`;
+    return;
+  }
+  // screener: every liquid stock against this period's levels
+  let rows = (CPR.rows||[]).map(r=>{ const z = r[tf]||{}, d = z[st]||{};
+    const trig = st==="b" ? z.h4 : z.l3, dist = trig && r.price ? (trig / r.price - 1) * 100 : null;
+    const pri = d.st==="entered" ? (d.x ? 2 : 0) : (st==="b" ? (d.st==="waiting" && d.oz ? 1 : 3) : (d.st==="below" ? 1 : 3));
+    return {...r, z, d, dist: st==="b" ? dist : (d.st==="below" ? -dist : dist), cw: z.w, ed: d.st==="entered" ? d.ago : null, g: d.g, pri}; })
+    .filter(r=>(r.rs||0) >= rsMin && (!up || r.up) && (!nw || (r.cw!=null && r.cw < nw)));
+  if (!all) rows = rows.filter(r=> st==="b" ? ((r.d.st==="waiting" || r.d.st==="entered") && (!oz || r.d.oz)) : (r.d.st==="below" || r.d.st==="entered"));
+  const nE = rows.filter(r=>r.d.st==="entered").length, nW = rows.filter(r=>r.d.st==="waiting" || r.d.st==="below").length;
+  rows = srt(rows);
+  if (+sortK.value === 0) rows.sort((a,b)=> a.pri-b.pri || (a.d.ago??99)-(b.d.ago??99) || Math.abs(a.dist??99)-Math.abs(b.dist??99));
+  const total = rows.length; rows = rows.slice(0, cpN);
+  more.innerHTML = total > cpN ? `<button type="button" class="sel" style="cursor:pointer" id="cp_more">Show ${Math.min(500,total-cpN)} more (${total-cpN} hidden)</button>` : "";
+  if ($("cp_more")) $("cp_more").onclick = () => { cpN += 500; draw(); };
+  hint.innerHTML = statHtml + cmpHtml + brWarn + `<p class="sub" style="margin:0 0 8px"><b>${esc(label)}</b>: ${rule}. This ${per}: <b>${nE}</b> entered, <b>${nW}</b> ${st==="b"?"waiting for a break above H4":"below L3 now (a close back above L3 is the entry)"}. Levels as of ${dl(CPR.asof)}; market breadth ${brNow ?? "–"}%.</p>`;
+  const zl = {">H4":"above H4","H3-H4":"H3–H4","L3-H3":"inside","L4-L3":"L4–L3","<L4":"below L4"};
+  t.innerHTML = `<thead><tr><th class="l">Stock</th><th>Status</th><th>Price</th><th>${st==="b"?"Buy above (H4)":"Buy on a close above (L3)"}</th><th>Stop (${st==="b"?"H3":"L4"})</th><th>Target (${st==="b"?"H5":"H3"})</th><th>Now / opened</th><th>CPR width</th><th>RS</th><th>50-DMA</th></tr></thead><tbody>${rows.map(r=>{ const z = r.z, d = r.d;
+    const stx = d.st==="entered" ? (d.x ? `<span class="mut">entered ${d.ago}d ago, closed</span><small class="${d.g>0?'ok':'bad'}" style="display:block">${esc(d.x)} · ${pc(d.g,1)}</small>`
+              : `<span class="new">${d.ago===0?"entered today":"entered "+d.ago+"d ago"}</span><small class="mut" style="display:block">at ₹${fmt(d.e)} · ${pc(d.g,1)} now</small>`)
+              : d.st==="failed" ? `<span class="mut">${st==="b"?"failed (fell below H3)":"failed (hit L4)"}</span>` : `${esc(CPST[d.st]||"–")}${st==="b" && d.st==="waiting" && !d.oz ? '<small class="mut" style="display:block">did not open H3–H4</small>' : ""}`;
+    return `<tr>${nm(r)}<td>${stx}</td><td>₹${fmt(r.price)}</td>
+      <td><b>₹${fmt(st==="b"?z.h4:z.l3)}</b>${r.dist!=null && d.st!=="entered"?`<small class="mut" style="display:block">${fmt(Math.abs(r.dist),1)}% ${st==="b"?(r.dist>0?"away":"above"):(d.st==="below"?"above price":"below price")}</small>`:""}</td>
+      <td>₹${fmt(st==="b"?z.h3:z.l4)}</td><td>₹${fmt(st==="b"?z.h5:z.h3)}</td>
+      <td>${zl[z.zn]||"–"}<small class="mut" style="display:block">opened ${zl[z.zo]||"–"}</small></td>
+      <td>${z.w!=null?fmt(z.w,2)+"%":"–"}<small class="mut" style="display:block">${z.rise==="higher"?"rising":z.rise==="lower"?"falling":z.rise?"flat":""}</small></td>
+      <td>${r.rs??"–"}</td><td>${r.up==null?"–":r.up?'<span class="ok">above</span>':'<span class="bad">below</span>'}</td></tr>`; }).join("") || '<tr><td colspan="10" class="mut">No stocks match right now. Tick "Show all stocks" to see every stock against its levels.</td></tr>'}</tbody>`;
+}
 // ---------- Weekly SMC (smc.json, loaded when the tab is opened) ----------
 let SMC = null, smcLoading = false, smcN = 200;
 ["smc_tg","smc_rs","smc_span"].forEach(id=>{ const el = document.getElementById(id), v = store.get("azh:"+id); if (v!==null) el.value = v;
@@ -404,11 +501,13 @@ function draw(){
   lg("ttebar").style.display = view === "tte" ? "" : "none";
   lg("apbar").style.display = view === "ap" ? "" : "none";
   lg("smcbar").style.display = view === "smc" ? "" : "none";
-  hint.style.maxWidth = (view === "ap" || view === "tte" || view === "smc") ? "none" : "";
-  document.querySelectorAll("#clean,#qab,#risk").forEach(e=>e.closest("label").style.display = view==="log" || ((view==="tte" || view==="ap" || view==="smc") && e.id!=="risk") ? "none" : "");
+  lg("cprbar").style.display = view === "cpr" ? "" : "none";
+  hint.style.maxWidth = (view === "ap" || view === "tte" || view === "smc" || view === "cpr") ? "none" : "";
+  document.querySelectorAll("#clean,#qab,#risk").forEach(e=>e.closest("label").style.display = view==="log" || view==="cpr" || ((view==="tte" || view==="ap" || view==="smc") && e.id!=="risk") ? "none" : "");
   if (view==="log"){ drawLog(t, hint); return; }
   if (view==="ap"){ drawAP(t, hint); return; }
   if (view==="smc"){ drawSMC(t, hint); return; }
+  if (view==="cpr"){ drawCPR(t, hint); return; }
   if (view==="open"){
     const rows = srt(curOpen().filter(keep));
     hint.innerHTML = `Market filter: <b>${VLAB[bv]}</b>. ${rows.filter(r=>r.ago<=1).length} new signal(s) in the last two weeks, ${rows.length} open trade(s) in all. Enter at about the signal price; the quantity uses your risk per trade and the stop-loss.`;

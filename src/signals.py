@@ -15,6 +15,7 @@ from . import ownership as _own
 from . import buy as _buy
 from . import trend3 as _t3
 from . import template as _tt
+from . import cpr as _cpr
 from .themes_list import META as _TH_META
 
 # id, group, label, kind ("s" state / "e" event)
@@ -106,6 +107,7 @@ META += [(i, "Ownership and alerts", l, k) for i, l, k in _own.META]
 META += [(i, "Buy criteria (weekly)", l, k) for i, l, k in _buy.META]
 META += [(i, "Trend lines", l, k) for i, l, k in _t3.META]
 META += [(i, "Trend Template (Minervini)", l, k) for i, l, k in _tt.META]
+META += [(i, "CPR + Camarilla", l, k) for i, l, k in _cpr.META]
 META += [("hl_ok", "Halal", "Halal: in the NIFTY500 Shariah index", "s"),
          ("hl_nofail", "Halal", "Halal: not excluded (compliant, or business looks permissible but not verified)", "s")]
 META += [(i, "Themes", l, k) for i, l, k in _TH_META]
