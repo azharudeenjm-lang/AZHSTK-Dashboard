@@ -1,0 +1,69 @@
+{
+ "/api/corporates-pit": {
+  "ok": 1,
+  "fail": 0,
+  "codes": [],
+  "sample": "{\"acqNameList\":[],\"data\":[]}"
+ },
+ "/api/corporate-pledgedata": {
+  "ok": 1,
+  "fail": 0,
+  "codes": [],
+  "sample": "{\"comNameList\":[\"20 Microns Limited\",\"21st Century Management Services Limited\",\"360 ONE WAM LIMITED\",\"3M India Limited\",\"3P Land Holdings Limited\",\"63 moons technologies limited\",\"A2Z Infra Engineering Limited\",\"ABB India Limited\",\"ACC Limited\",\"ADF Foods Limited\",\"AGS Transact Technologies Limited\",\"AIA Engineering Limited\",\"AION-TECH SOLUTIONS LIMITED\",\"AJR INFRA AND TOLLING LIMITED\",\"AMD Industries Limited\",\"ANDHRA PAPER LIMITED\",\"APL Apollo Tubes Limited\",\"ARSS Infrastructure Projects Limited\",\"ATLANTAA LIMITED\",\"ATN International Limited\",\"AU Small Finance Bank Limited\",\"AURUS GEM CORPORATION LIMITED\",\"AVG Logistics Limited\",\"AVT Natural Products Limited\",\"AXISCADES Technologies Limited\",\"Aadhar Housing Finance Limited\",\"Aarti Drugs Limited\",\"Aarti Industries Limited\",\"Aarti Pharmalabs Limited\",\"Aban Offshore Limited\",\"Abans Financial Services Limited\",\"Abhishek Corporation Limited\",\"Accelya Solutions India Limited\",\"Accuracy Shipping Limited\",\"Action Construction Equipment Limited\",\"Adani Energy Solutions Limited\",\"Adani Enterprises Limited\",\"Adani Green Energy Limited\",\"Adani Ports and Special Economic Zone Limited\",\"Adani Power Limited\",\"Aditya Birla Capital Limited\",\"Aditya Birla Fashion and Retail Limited\",\"Aditya Birla Money Limited\",\"Aditya Birla Real Estate Limited\",\"Ador Welding Limited\",\"Advanced Enzyme Technologies Limited\",\"Advani Hotels & Resorts (India) Limited\",\"Advent Hotels International Limited\",\"Aegis Logistics Limited\",\"Aequs Limited\",\"Afcons Infrast"
+ },
+ "/api/snapshot-capital-market-largedeal": {
+  "ok": 1,
+  "fail": 0,
+  "codes": [],
+  "sample": "{\"as_on_date\":\"13-Nov-2026\",\"BULK_DEALS_DATA\":[{\"buySell\":\"BUY\",\"clientName\":\"VAIBHAV RAJENDRA DOSHI\",\"date\":\"13-Nov-2026\",\"name\":\"AAA Technologies Limited\",\"qty\":\"80083\",\"remarks\":\"-\",\"symbol\":\"AAATECH\",\"watp\":\"90.63\"},{\"buySell\":\"BUY\",\"clientName\":\"JUNOMONETA FINSOL PRIVATE LIMITED\",\"date\":\"13-Nov-2026\",\"name\":\"Alicon Castalloy Limited\",\"qty\":\"95589\",\"remarks\":\"-\",\"symbol\":\"ALICON\",\"watp\":\"941.01\"},{\"buySell\":\"BUY\",\"clientName\":\"MICROCURVES TRADING PRIVATE LIMITED\",\"date\":\"13-Nov-2026\",\"name\":\"Alicon Castalloy Limited\",\"qty\":\"109747\",\"remarks\":\"-\",\"symbol\":\"ALICON\",\"watp\":\"950.14\"},{\"buySell\":\"BUY\",\"clientName\":\"ALPHAGREP SECURITIES PRIVATE LIMITED\",\"date\":\"13-Nov-2026\",\"name\":\"Alicon Castalloy Limited\",\"qty\":\"123544\",\"remarks\":\"-\",\"symbol\":\"ALICON\",\"watp\":\"937.65\"},{\"buySell\":\"BUY\",\"clientName\":\"NK SECURITIES RESEARCH PRIVATE LIMITED\",\"date\":\"13-Nov-2026\",\"name\":\"Alicon Castalloy Limited\",\"qty\":\"102709\",\"remarks\":\"-\",\"symbol\":\"ALICON\",\"watp\":\"943.46\"},{\"buySell\":\"BUY\",\"clientName\":\"GRAVITON RESEARCH CAPITAL LLP\",\"date\":\"13-Nov-2026\",\"name\":\"Amber Enterprises (I) Ltd\",\"qty\":\"295139\",\"remarks\":\"-\",\"symbol\":\"AMBER\",\"watp\":\"6620.16\"},{\"buySell\":\"BUY\",\"clientName\":\"PINKAL SHAILESHKUMAR JOGANI\",\"date\":\"13-Nov-2026\",\"name\":\"Bombay Coated N Specl S L\",\"qty\":\"325000\",\"remarks\":\"-\",\"symbol\":\"BCSSL\",\"watp\":\"81.25\"},{\"buySell\":\"BUY\",\"clientName\":\"ALPHAGREP SECURITIES PRIVATE LIMITED\",\"date\":\"13-Nov-2026\",\"name\":\"BF Utilities Limited\",\"qty\":\"465484\",\"remarks\":\"-\",\"symbol\":\"BFUTILITIE\","
+ },
+ "/api/reportASM": {
+  "ok": 1,
+  "fail": 0,
+  "codes": [],
+  "sample": "{\"longterm\":{\"data\":[{\"asmSurvIndicator\":\"Stage I\",\"asmTime\":\"13-Nov-2026\",\"companyName\":\"A2Z Infra Engineering Limited\",\"isin\":\"INE619I01012\",\"series\":null,\"survCode\":\"LTASM - I (13)\",\"survDesc\":\"Long Term Additional Surveillance Measure (LTASM) - Stage I\",\"symbol\":\"A2ZINFRA\",\"srno\":1},{\"asmSurvIndicator\":\"Stage I\",\"asmTime\":\"13-Nov-2026\",\"companyName\":\"AAA Technologies Limited\",\"isin\":\"INE0D0U01013\",\"series\":null,\"survCode\":\"LTASM - I (13)\",\"survDesc\":\"Long Term Additional Surveillance Measure (LTASM) - Stage I\",\"symbol\":\"AAATECH\",\"srno\":2},{\"asmSurvIndicator\":\"Stage I\",\"asmTime\":\"13-Nov-2026\",\"companyName\":\"Aaa Technologies Limited\",\"isin\":\"INE0D0U01013\",\"series\":null,\"survCode\":\"LTASM - I (13)\",\"survDesc\":\"Long Term Additional Surveillance Measure (LTASM) - Stage I\",\"symbol\":\"AAATECH\",\"srno\":3},{\"asmSurvIndicator\":\"Stage I\",\"asmTime\":\"13-Nov-2026\",\"companyName\":\"Aarey Drugs & Pharmaceuticals Limited\",\"isin\":\"INE198H01019\",\"series\":null,\"survCode\":\"LTASM - I (13)\",\"survDesc\":\"Long Term Additional Surveillance Measure (LTASM) - Stage I\",\"symbol\":\"AAREYDRUGS\",\"srno\":4},{\"asmSurvIndicator\":\"Stage I\",\"asmTime\":\"13-Nov-2026\",\"companyName\":\"Aastha Spintex Limited\",\"isin\":\"INE2FMX01012\",\"series\":null,\"survCode\":\"LTASM - I (13)\",\"survDesc\":\"Long Term Additional Surveillance Measure (LTASM) - Stage I\",\"symbol\":\"AASTHA\",\"srno\":5},{\"asmSurvIndicator\":\"Stage I\",\"asmTime\":\"13-Nov-2026\",\"companyName\":\"Artemis Electricals and Projects Limited\",\"isin\":\"INE757T01025\",\"series\":null,\"survCod"
+ },
+ "/api/reportGSM": {
+  "ok": 1,
+  "fail": 0,
+  "codes": [],
+  "sample": "[{\"companyName\":\"AGS Transact Technologies Limited\",\"gsmStage\":\"LXII\",\"gsmTime\":\"13-Nov-2026 08:08:03\",\"isin\":\"INE583L01014\",\"survCode\":\"IBC - Receipt & GSM 0 (62)\",\"survDesc\":\"Insolvency and Bankruptcy Code (IBC) - Receipt of Disclosure or Recommenced scrip and GSM stage 0\",\"symbol\":\"AGSTRA\",\"srno\":1},{\"companyName\":\"Ankit Metal & Power Limited\",\"gsmStage\":\"LVIII\",\"gsmTime\":\"13-Nov-2026 08:08:03\",\"isin\":\"INE106I01010\",\"survCode\":\"IBC I & GSM 0 (58)\",\"survDesc\":\"ASM IBC Stage I and GSM Stage 0\",\"symbol\":\"ANKITMETAL\",\"srno\":2},{\"companyName\":\"Aqylon Nexus Limited\",\"gsmStage\":\"L\",\"gsmTime\":\"13-Nov-2026 08:08:03\",\"isin\":\"INE416A01051\",\"survCode\":\"LTASM I & GSM 0 (50)\",\"survDesc\":\"LTASM Stage I and GSM Stage 0\",\"symbol\":\"AQYLON\",\"srno\":3},{\"companyName\":\"Asian Tea & Exports Limited\",\"gsmStage\":\"0\",\"gsmTime\":\"13-Nov-2026 08:08:03\",\"isin\":\"INE822B01017\",\"survCode\":\"GSM - 0 (99)\",\"survDesc\":\"Shortlisted under Graded Surveillance Measure\",\"symbol\":\"ASIANTNE\",\"srno\":4},{\"companyName\":\"Amit Spinning Industries Limited\",\"gsmStage\":\"VI\",\"gsmTime\":\"13-Nov-2026 08:08:03\",\"isin\":\"INE988A01026\",\"survCode\":\"GSM - VI (6)\",\"survDesc\":\"Graded Surveillance Measure - Stage VI\",\"symbol\":\"ASIL\",\"srno\":5},{\"companyName\":\"ATN International Limited\",\"gsmStage\":\"VI\",\"gsmTime\":\"13-Nov-2026 08:08:03\",\"isin\":\"INE803A01027\",\"survCode\":\"GSM - VI (6)\",\"survDesc\":\"Graded Surveillance Measure - Stage VI\",\"symbol\":\"ATNINTER\",\"srno\":6},{\"companyName\":\"Balkrishna Paper Mills Limited\",\"gsmStage\":\"0\",\"gsmTime\":\"13-N"
+ },
+ "/api/results-comparision": {
+  "ok": 400,
+  "fail": 0,
+  "codes": [],
+  "sample": "{\"resCmpData\":null,\"bankNonBnking\":\"-\"}"
+ },
+ "results_parsed": {
+  "with_figures": 288,
+  "tried": 400,
+  "cached": 2614,
+  "example": {
+   "20MICRONS": {
+    "res_end": "2024-12-31",
+    "sg": 22.7,
+    "pg": 0.8,
+    "eps_ttm": 15.25,
+    "npm_q": 5.4,
+    "at": "2026-11-10"
+   }
+  }
+ },
+ "/api/equity-stockIndices": {
+  "ok": 0,
+  "fail": 8,
+  "codes": [
+   404,
+   404,
+   404,
+   404,
+   404
+  ]
+ },
+ "_run": {
+  "at": "2026-11-14 00:38 IST",
+  "mode": "full",
+  "seconds": 1260
+ }
+}
